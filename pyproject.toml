@@ -1,0 +1,24 @@
+[project]
+name = "housing-choice"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "geopandas>=1.1.2",
+    "ipykernel<7",
+    "matplotlib>=3.10.8",
+    "pandana>=0.7",
+    "pandas>=3.0.1",
+    "pandas-stubs>=3.0.0.260204",
+    "psycopg2>=2.9.11",
+    "sqlalchemy>=2.0.47",
+]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = ["D"]
+
+[tool.basedpyright]
+typeCheckingMode = "standard"
+ignore = ["**/*.ipynb"]
