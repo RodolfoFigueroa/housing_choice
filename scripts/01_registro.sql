@@ -53,7 +53,7 @@ CREATE OR REPLACE TABLE registro AS WITH loaded_excel AS (
             (lower("Mercado Exe") == 'sí') AS mercado_exe,
             "Categoría" AS categoria
         FROM read_xlsx(
-                '/Users/rodolfofigueroa/Library/CloudStorage/OneDrive-InstitutoTecnologicoydeEstudiosSuperioresdeMonterrey/mexicali_data/processing/RPPC_vivienda-interes-social-nueva_2020-2024.xlsx',
+                'C:/Users/lain/OneDrive - Instituto Tecnologico y de Estudios Superiores de Monterrey/mexicali_data/processing/RPPC_vivienda-interes-social-nueva_2020-2024.xlsx',
                 all_varchar = true,
                 header = true
             )
@@ -74,6 +74,7 @@ CREATE OR REPLACE TABLE registro AS WITH loaded_excel AS (
                 WHEN starts_with(fraccionamiento, 'FRAC') THEN fraccionamiento.REPLACE('FRACC ', '').REPLACE('FRACCIONAMIENTO ', '').REPLACE('FRACCTO ', '').REPLACE('FRACTO ', '')
                 WHEN fraccionamiento LIKE 'COLONIA BALBUENA%' THEN fraccionamiento.REPLACE('DE MEXICALI BC DENTRO DE LA', '')
                 WHEN fraccionamiento LIKE 'COLONIA GRANJAS AGRICOLAS%' THEN fraccionamiento.REPLACE('FOLIO REAL 1598810 DE MEXICALI BC', '')
+                WHEN fraccionamiento LIKE 'LA RIOJA%' THEN fraccionamiento.REPLACE('CASTILLAUNA', 'CASTILLA')
                 ELSE fraccionamiento
             END AS fraccionamiento,
             CASE
@@ -148,9 +149,10 @@ SELECT IF(l.partida = r.partida, 1, 0) AS is_main,
     l.partida AS partida_main,
     r.*
 FROM muestra l
-    LEFT JOIN registro r ON r.fecha_operacion BETWEEN l.fecha_operacion - INTERVAL 15 DAYS
-    AND l.fecha_operacion + INTERVAL 15 DAYS
-    AND ABS(l.mts_superficie - r.mts_superficie) < 50
+    LEFT JOIN registro r 
+        ON r.fecha_operacion 
+            BETWEEN l.fecha_operacion - INTERVAL 15 DAYS AND l.fecha_operacion + INTERVAL 15 DAYS
+        -- AND ABS(l.mts_superficie - r.mts_superficie) < 50
 ORDER BY r.fecha_operacion,
     is_main DESC;
 --
