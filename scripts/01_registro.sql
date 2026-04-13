@@ -74,7 +74,6 @@ CREATE OR REPLACE TABLE registro AS WITH loaded_excel AS (
                 WHEN starts_with(fraccionamiento, 'FRAC') THEN fraccionamiento.REPLACE('FRACC ', '').REPLACE('FRACCIONAMIENTO ', '').REPLACE('FRACCTO ', '').REPLACE('FRACTO ', '')
                 WHEN fraccionamiento LIKE 'COLONIA BALBUENA%' THEN fraccionamiento.REPLACE('DE MEXICALI BC DENTRO DE LA', '')
                 WHEN fraccionamiento LIKE 'COLONIA GRANJAS AGRICOLAS%' THEN fraccionamiento.REPLACE('FOLIO REAL 1598810 DE MEXICALI BC', '')
-                WHEN fraccionamiento LIKE 'LA RIOJA%' THEN fraccionamiento.REPLACE('CASTILLAUNA', 'CASTILLA')
                 ELSE fraccionamiento
             END AS fraccionamiento,
             CASE
@@ -100,6 +99,9 @@ CREATE OR REPLACE TABLE registro AS WITH loaded_excel AS (
 SELECT * EXCLUDE (fraccionamiento),
     rtrim(fraccionamiento) AS fraccionamiento
 FROM clean_frac;
+
+COPY registro TO "data/processed/registro.parquet" (FORMAT PARQUET);
+
 --
 
 -- Llena la coordenadas de los fracionamientos faltantes
@@ -113,7 +115,7 @@ FROM (
             ('Gran Foresta', 32.563446, -115.434414),
             ('Huertas del Colorado', 32.563662, -115.411109),
             (
-                'LA RIOJA SECCION CASTILLAUNA',
+                'ASDASDASDASD SECCION CASTILLAUNA',
                 32.656198,
                 -115.364974
             ),
