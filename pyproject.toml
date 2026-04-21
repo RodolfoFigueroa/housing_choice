@@ -29,8 +29,13 @@ dependencies = [
 
 [tool.ruff.lint]
 select = ["ALL"]
-ignore = ["D"]
+ignore = ["D", "COM812"]
 
 [tool.basedpyright]
 typeCheckingMode = "standard"
 ignore = ["**/*.ipynb"]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.5.1",
+]
