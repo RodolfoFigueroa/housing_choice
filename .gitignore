@@ -219,3 +219,7 @@ __marimo__/
 .DS_Store
 data/
 cache/
+*.parquet
+*.geoparquet
+*.html
+params/
