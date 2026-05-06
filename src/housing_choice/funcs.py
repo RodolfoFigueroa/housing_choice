@@ -39,27 +39,31 @@ def calculate_accessibility_jobs(df: gpd.GeoDataFrame, client: LyraAPIClient):
     for prefix in prefixes_flat:
         group_patterns[prefix] = rf"^{prefix}\d{{4}}"
 
-    response = client.process(
-        "accessibility_jobs",
-        payload={
-            "data": {
-                "data_type": "geojson",
-                "value": json.loads(df[["geometry"]].to_json()),
+    out = []
+    for year in range(2020, 2026):
+        response = client.process(
+            "accessibility_jobs",
+            payload={
+                "data": {
+                    "data_type": "geojson",
+                    "value": json.loads(df[["geometry"]].to_json()),
+                },
+                "items": {
+                    key: {
+                        "pattern": pattern,
+                        "edge_weights": "travel_time",
+                        "max_weight": 20 * 60,
+                        "network_type": "drive",
+                    }
+                    for key, pattern in group_patterns.items()
+                },
+                "year": year,
             },
-            "items": {
-                key: {
-                    "pattern": pattern,
-                    "edge_weights": "travel_time",
-                    "max_weight": 20 * 60,
-                    "network_type": "drive",
-                }
-                for key, pattern in group_patterns.items()
-            },
-            "year": 2025,
-        },
-    )
-
-    return pd.DataFrame(response["result"]).transpose()
+        )
+        temp = pd.DataFrame(response["result"]).transpose().assign(year=year)
+        temp.columns = [f"{col}_{year}" for col in temp.columns]
+        out.append(temp)
+    return pd.concat(out, axis=1)
 
 
 def calculate_accessibility_services(
