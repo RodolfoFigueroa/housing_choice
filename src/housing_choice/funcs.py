@@ -1,11 +1,12 @@
 import json
 import re
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 
 import geopandas as gpd
 import pandas as pd
-from lyra_api import LyraAPIClient
+from lyra.api import LyraAPIClient
 
 
 def load_parks(data_path: Path) -> gpd.GeoDataFrame:
@@ -24,7 +25,9 @@ def load_parks(data_path: Path) -> gpd.GeoDataFrame:
     )
 
 
-def calculate_accessibility_jobs(df: gpd.GeoDataFrame, client: LyraAPIClient):
+def calculate_accessibility_jobs(
+    df: gpd.GeoDataFrame, client: LyraAPIClient, years: Sequence[int] = [2025]
+) -> pd.DataFrame:
     group_patterns = {
         "all": r"^\d{6}",
         "manufacture": r"^(11|21|23|31|32|33)\d{4}",
@@ -40,7 +43,9 @@ def calculate_accessibility_jobs(df: gpd.GeoDataFrame, client: LyraAPIClient):
         group_patterns[prefix] = rf"^{prefix}\d{{4}}"
 
     out = []
-    for year in range(2020, 2026):
+    for year in years:
+        month = 5 if year == 2025 else 11
+
         response = client.process(
             "accessibility_jobs",
             payload={
@@ -49,21 +54,28 @@ def calculate_accessibility_jobs(df: gpd.GeoDataFrame, client: LyraAPIClient):
                     "value": json.loads(df[["geometry"]].to_json()),
                 },
                 "items": {
-                    key: {
+                    f"{key}_{thresh}": {
                         "pattern": pattern,
                         "edge_weights": "travel_time",
-                        "max_weight": 20 * 60,
+                        "max_weight": thresh * 60,
                         "network_type": "drive",
                     }
                     for key, pattern in group_patterns.items()
+                    for thresh in [10, 20]
                 },
                 "year": year,
+                "month": month,
             },
         )
         temp = pd.DataFrame(response["result"]).transpose().assign(year=year)
         temp.columns = [f"{col}_{year}" for col in temp.columns]
         out.append(temp)
-    return pd.concat(out, axis=1)
+    return (
+        pd.concat(out, axis=1)
+        .reset_index(names="index")
+        .assign(index=lambda df: df["index"].astype(int))
+        .set_index("index")
+    )
 
 
 def calculate_accessibility_services(
@@ -96,4 +108,10 @@ def calculate_accessibility_services(
             },
         },
     )
-    return pd.DataFrame(response["result"]).transpose()
+    return (
+        pd.DataFrame(response["result"])
+        .transpose()
+        .reset_index(names="index")
+        .assign(index=lambda df: df["index"].astype(int))
+        .set_index("index")
+    )

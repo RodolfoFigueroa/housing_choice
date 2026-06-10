@@ -10,12 +10,18 @@ dependencies = [
     "cython>=3.2.4",
     "cythonbiogeme>=1.0.4",
     "duckdb>=1.4.4",
+    "earthengine-api>=1.7.30",
+    "geedim>=2.0.0",
+    "geemap>=0.38.0",
     "geopandas>=1.1.2",
     "ipykernel<7",
     "lyra-api",
     "mapclassify>=2.10.0",
+    "marimo>=0.23.9",
     "matplotlib>=3.10.8",
+    "mcp>=1.27.2",
     "numpy>=2.3.3",
+    "openai>=2.41.0",
     "openpyxl>=3.1.5",
     "osmium>=4.3.1",
     "osmnx>=2.1.0",
@@ -24,6 +30,7 @@ dependencies = [
     "pandas-stubs>=3.0.0.260204",
     "psycopg2>=2.9.11",
     "pyarrow>=23.0.1",
+    "pydantic-ai-slim>=1.106.0",
     "scikit-learn>=1.8.0",
     "seaborn>=0.13.2",
     "sqlalchemy>=2.0.47",
@@ -32,19 +39,14 @@ dependencies = [
 
 [tool.ruff.lint]
 select = ["ALL"]
-ignore = ["D", "COM812"]
+ignore = ["D", "COM812", "PLR2004"]
 
 [tool.basedpyright]
 typeCheckingMode = "standard"
 ignore = ["**/*.ipynb"]
 
-[tool.uv.sources]
-lyra-api = { git = "https://github.com/RodolfoFigueroa/lyra-api" }
-
 [dependency-groups]
-dev = [
-    "pre-commit>=4.5.1",
-]
+dev = ["pre-commit>=4.5.1"]
 
 [build-system]
 requires = ["hatchling>=1.27.0"]
@@ -52,3 +54,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/housing_choice"]
+
+[tool.uv.sources]
+lyra-api = { git = "https://github.com/RodolfoFigueroa/lyra", subdirectory = "packages/lyra_api", branch = "dev" }
