@@ -221,5 +221,4 @@ data/
 cache/
 *.parquet
 *.geoparquet
-*.html
 params/
