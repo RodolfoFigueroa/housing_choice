@@ -30,10 +30,14 @@ def calculate_accessibility_jobs(
 ) -> pd.DataFrame:
     group_patterns = {
         "all": r"^\d{6}",
-        "manufacture": r"^(11|21|23|31|32|33)\d{4}",
-        "infrastructure": r"^(22|43|46|48|49)\d{4}",
-        "specialized": r"^(51|52|53|54|55|56)\d{4}",
-        "care": r"^(61|62|71|72|81|92)\d{4}",
+        "manufacture": r"^(31|32|33)\d{4}",
+        "construction": r"^23\d{4}",
+        "logistics": r"^(48|49)\d{4}",
+        "commerce": r"^(43|46)\d{4}",
+        "business_services": r"^(51|52|53|54|55|56)\d{4}",
+        "care_education_health": r"^(61|62)\d{4}",
+        "local_services": r"^(71|72|81)\d{4}",
+        "public_admin": r"^92\d{4}",
     }
 
     prefixes = [re.findall(r"\d{2}", val) for val in group_patterns.values()]

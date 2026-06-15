@@ -11,11 +11,14 @@ dependencies = [
     "cythonbiogeme>=1.0.4",
     "duckdb>=1.4.4",
     "earthengine-api>=1.7.30",
+    "esda>=2.9.0",
     "geedim>=2.0.0",
     "geemap>=0.38.0",
     "geopandas>=1.1.2",
     "ipykernel<7",
+    "libpysal>=4.14.1",
     "lyra-api",
+    "lyra-sdk",
     "mapclassify>=2.10.0",
     "marimo>=0.23.9",
     "matplotlib>=3.10.8",
@@ -57,3 +60,4 @@ packages = ["src/housing_choice"]
 
 [tool.uv.sources]
 lyra-api = { git = "https://github.com/RodolfoFigueroa/lyra", subdirectory = "packages/lyra_api", branch = "dev" }
+lyra-sdk = { git = "https://github.com/RodolfoFigueroa/lyra", subdirectory = "packages/lyra_sdk", branch = "dev" }
