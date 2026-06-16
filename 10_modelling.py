@@ -4,26 +4,30 @@ __generated_with = "0.23.9"
 app = marimo.App(width="medium")
 
 with app.setup:
-    import math
     import os
-    import re
     import warnings
     from pathlib import Path
 
-    import biogeme.database as db
     import geopandas as gpd
     import marimo as mo
     import matplotlib.pyplot as plt
-    import numpy as np
     import pandas as pd
     import seaborn as sns
-    from biogeme import models
-    from biogeme.biogeme import BIOGEME
-    from biogeme.expressions import Beta, Variable
-    from biogeme.parameters import Parameters
-    from biogeme.results_processing import get_pandas_estimated_parameters
-    from scipy.optimize import minimize
-    from scipy.special import logsumexp
+
+    from housing_choice.modeling import (
+        align_choice_data,
+        build_feature_catalog,
+        build_feature_diagnostics_frame,
+        build_single_candidate_model_specs,
+        compute_feature_diagnostics,
+        compute_scale_audit,
+        fit_biogeme_model,
+        fit_fast_mnl_screen,
+        predict_choice_shares,
+        prepare_neighborhood_features,
+        prepare_transactions,
+        run_derivative_check,
+    )
 
     warnings.filterwarnings("ignore", category=FutureWarning)
 
@@ -75,768 +79,39 @@ def _():
     mo.md("""
     ## Setup Helpers
 
-    These functions define the reusable modelling machinery: feature cataloging, scaling, diagnostics, choice-frame construction, fast screening, guarded Biogeme estimation, and prediction summaries.
+    Reusable modelling machinery now lives in `housing_choice.modeling`: feature cataloging, scaling, diagnostics, choice-frame construction, fast screening, guarded Biogeme estimation, and prediction summaries.
     """)
     return
 
 
 @app.cell
-def _(
-    BIOGEME_MODEL_PREFIX,
-    MISSING_VALUE_SENTINEL,
-    TARGET_SCALE_LOWER,
-    TARGET_SCALE_UPPER,
-):
-
-    def safe_identifier(value):
-        safe = re.sub(r"[^0-9A-Za-z_]+", "_", str(value)).strip("_")
-        if not safe:
-            return "unnamed"
-        if safe[0].isdigit():
-            return f"v_{safe}"
-        return safe
-
-    def nice_scale_denominator(values, target_p75=5.0):
-        finite = (
-            pd.to_numeric(pd.Series(values), errors="coerce")
-            .replace([np.inf, -np.inf], np.nan)
-            .dropna()
-        )
-        finite = finite.loc[finite.ne(0)].abs()
-        if finite.empty:
-            return 1.0
-        raw_denominator = float(finite.quantile(0.75) / target_p75)
-        if raw_denominator <= 0 or not np.isfinite(raw_denominator):
-            return 1.0
-        exponent = math.floor(math.log10(raw_denominator))
-        candidates = []
-        for exp in range(exponent - 2, exponent + 3):
-            for multiplier in [1, 2, 5, 10]:
-                candidates.append(multiplier * (10**exp))
-        return float(
-            min(
-                candidates,
-                key=lambda candidate: abs(math.log(candidate / raw_denominator)),
-            )
-        )
-
-    def build_feature_catalog(neighborhood_raw):
-        rows = []
-        selected_cluster_features = {
-            "mfg_distance_nearest_cluster_km": {
-                "family": "manufacturing_cluster",
-                "role": "mfg_screen",
-                "transform_kind": "scaled_distance",
-            },
-            "log_mfg_jobs_within_2km": {
-                "family": "manufacturing_cluster",
-                "role": "mfg_screen",
-                "transform_kind": "already_log_scaled",
-            },
-            "log_mfg_cluster_gravity_inv_sq": {
-                "family": "manufacturing_cluster",
-                "role": "mfg_screen",
-                "transform_kind": "already_log_scaled",
-            },
-            "logistics_distance_nearest_cluster_km": {
-                "family": "logistics_cluster",
-                "role": "logistics_screen",
-                "transform_kind": "scaled_distance",
-            },
-            "log_logistics_jobs_within_2km": {
-                "family": "logistics_cluster",
-                "role": "logistics_screen",
-                "transform_kind": "already_log_scaled",
-            },
-            "log_logistics_cluster_gravity_inv_sq": {
-                "family": "logistics_cluster",
-                "role": "logistics_screen",
-                "transform_kind": "already_log_scaled",
-            },
-        }
-        cluster_column_rules = [
-            ("mfg", "manufacturing_cluster"),
-            ("logistics", "logistics_cluster"),
-        ]
-
-        def cluster_family_for_column(column):
-            for prefix, family in cluster_column_rules:
-                if (
-                    column.startswith(f"{prefix}_")
-                    or column.startswith(f"nearest_{prefix}_")
-                    or f"_{prefix}_cluster" in column
-                ):
-                    return family
-            return None
-
-        for column in neighborhood_raw.columns:
-            if column in {"name", "name_detail", "geometry"}:
-                rows.append(
-                    {
-                        "source_column": column,
-                        "model_column": None,
-                        "family": "identifier",
-                        "role": "exclude",
-                        "transform": "not a model covariate",
-                        "scale_denominator": np.nan,
-                        "eligible": False,
-                        "reason": "identifier or geometry",
-                    }
-                )
-            elif column == "access":
-                rows.append(
-                    {
-                        "source_column": column,
-                        "model_column": "access_is_restricted",
-                        "family": "access",
-                        "role": "control",
-                        "transform": "LIBRE=0, RESTRINGIDO=1",
-                        "scale_denominator": 1.0,
-                        "eligible": True,
-                        "reason": "binary access control",
-                    }
-                )
-            elif column.startswith("jobs_") and column.endswith("_2025"):
-                source = pd.to_numeric(neighborhood_raw[column], errors="coerce")
-                eligible = source.nunique(dropna=True) > 1
-                denominator = nice_scale_denominator(source) if eligible else np.nan
-                rows.append(
-                    {
-                        "source_column": column,
-                        "model_column": f"{column}_scaled",
-                        "family": "job_accessibility",
-                        "role": "job_screen" if eligible else "exclude",
-                        "transform": f"divide by {denominator:g} jobs"
-                        if eligible
-                        else "zero variance",
-                        "scale_denominator": denominator,
-                        "eligible": bool(eligible),
-                        "reason": "candidate job accessibility"
-                        if eligible
-                        else "zero variance",
-                    }
-                )
-            elif column == "accessibility_services":
-                denominator = nice_scale_denominator(neighborhood_raw[column])
-                rows.append(
-                    {
-                        "source_column": column,
-                        "model_column": "accessibility_services_scaled",
-                        "family": "service_accessibility",
-                        "role": "control",
-                        "transform": f"divide by {denominator:g}",
-                        "scale_denominator": denominator,
-                        "eligible": True,
-                        "reason": "service accessibility control",
-                    }
-                )
-            elif column == "travel_time_city_center":
-                denominator = nice_scale_denominator(neighborhood_raw[column])
-                rows.append(
-                    {
-                        "source_column": column,
-                        "model_column": "travel_time_city_center_scaled",
-                        "family": "travel_time",
-                        "role": "control",
-                        "transform": f"divide by {denominator:g} seconds",
-                        "scale_denominator": denominator,
-                        "eligible": True,
-                        "reason": "centrality control",
-                    }
-                )
-            elif column in {"travel_time_crossing_west", "travel_time_crossing_east"}:
-                rows.append(
-                    {
-                        "source_column": column,
-                        "model_column": None,
-                        "family": "travel_time",
-                        "role": "helper",
-                        "transform": "combined into nearest crossing time",
-                        "scale_denominator": np.nan,
-                        "eligible": False,
-                        "reason": "raw crossing helper",
-                    }
-                )
-            elif column.startswith("built_area_"):
-                rows.append(
-                    {
-                        "source_column": column,
-                        "model_column": "log_built_area_ha",
-                        "family": "built_area_history",
-                        "role": "transaction_varying",
-                        "transform": "log1p(area_m2 / 10000) by purchase year",
-                        "scale_denominator": np.nan,
-                        "eligible": True,
-                        "reason": "dynamic supply proxy",
-                    }
-                )
-            elif column in selected_cluster_features:
-                cluster_feature = selected_cluster_features[column]
-                if cluster_feature["transform_kind"] == "scaled_distance":
-                    denominator = nice_scale_denominator(neighborhood_raw[column])
-                    model_column = f"{column}_scaled"
-                    transform = f"divide by {denominator:g} km"
-                else:
-                    denominator = 1.0
-                    model_column = column
-                    transform = "already log scaled"
-                rows.append(
-                    {
-                        "source_column": column,
-                        "model_column": model_column,
-                        "family": cluster_feature["family"],
-                        "role": cluster_feature["role"],
-                        "transform": transform,
-                        "scale_denominator": denominator,
-                        "eligible": True,
-                        "reason": "selected interpretable cluster exposure",
-                    }
-                )
-            elif (cluster_family := cluster_family_for_column(column)) is not None:
-                rows.append(
-                    {
-                        "source_column": column,
-                        "model_column": None,
-                        "family": cluster_family,
-                        "role": "available_not_screened",
-                        "transform": "not used in v1 model specs",
-                        "scale_denominator": np.nan,
-                        "eligible": False,
-                        "reason": "kept out to avoid over-specified cluster models",
-                    }
-                )
-            else:
-                rows.append(
-                    {
-                        "source_column": column,
-                        "model_column": None,
-                        "family": "other",
-                        "role": "exclude",
-                        "transform": "not classified for modelling",
-                        "scale_denominator": np.nan,
-                        "eligible": False,
-                        "reason": "unclassified",
-                    }
-                )
-
-        nearest_crossing = neighborhood_raw[
-            ["travel_time_crossing_west", "travel_time_crossing_east"]
-        ].min(axis=1)
-        nearest_denominator = nice_scale_denominator(nearest_crossing)
-        rows.append(
+def _():
+    modeling_helpers_summary = pd.DataFrame(
+        [
             {
-                "source_column": "min(travel_time_crossing_west, travel_time_crossing_east)",
-                "model_column": "travel_time_nearest_crossing_scaled",
-                "family": "travel_time",
-                "role": "control",
-                "transform": f"divide by {nearest_denominator:g} seconds",
-                "scale_denominator": nearest_denominator,
-                "eligible": True,
-                "reason": "nearest border crossing control",
-            }
-        )
-
-        return pd.DataFrame(rows)
-
-    def prepare_neighborhood_features(neighborhood_raw, feature_catalog):
-        prepared = pd.DataFrame(index=neighborhood_raw.index)
-        prepared["name_detail"] = neighborhood_raw["name_detail"]
-        prepared["name"] = neighborhood_raw["name"]
-        prepared["geometry"] = neighborhood_raw.geometry
-
-        for _, spec in feature_catalog.loc[
-            lambda df: df["eligible"] & df["model_column"].notna()
-        ].iterrows():
-            model_column = spec["model_column"]
-            source_column = spec["source_column"]
-            if (
-                model_column in prepared.columns
-                or spec["role"] == "transaction_varying"
-            ):
-                continue
-            if model_column == "access_is_restricted":
-                prepared[model_column] = neighborhood_raw["access"].map(
-                    {"LIBRE": 0, "RESTRINGIDO": 1}
-                )
-                continue
-            if (
-                source_column
-                == "min(travel_time_crossing_west, travel_time_crossing_east)"
-            ):
-                values = neighborhood_raw[
-                    ["travel_time_crossing_west", "travel_time_crossing_east"]
-                ].min(axis=1)
-            else:
-                values = pd.to_numeric(neighborhood_raw[source_column], errors="coerce")
-            denominator = float(spec["scale_denominator"])
-            prepared[model_column] = values.astype(float) / denominator
-
-        for column in neighborhood_raw.columns:
-            if column.startswith("built_area_"):
-                prepared[column] = pd.to_numeric(
-                    neighborhood_raw[column], errors="coerce"
-                )
-
-        return prepared
-
-    def prepare_transactions(
-        transactions_raw, neighborhood_names, min_year, max_year, threshold
-    ):
-        transactions = (
-            transactions_raw.loc[:, ["address", "purchase_date"]]
-            .rename(columns={"address": "neighborhood"})
-            .assign(
-                purchase_year=lambda df: pd.to_datetime(df["purchase_date"]).dt.year
-            )
-            .loc[lambda df: df["purchase_year"].between(min_year, max_year)]
-            .loc[lambda df: df["neighborhood"].isin(set(neighborhood_names))]
-            .reset_index(drop=True)
-        )
-        counts = (
-            transactions["neighborhood"]
-            .value_counts()
-            .rename_axis("neighborhood")
-            .reset_index(name="transactions")
-        )
-        wanted_names = counts.loc[
-            counts["transactions"] >= threshold, "neighborhood"
-        ].tolist()
-        filtered = transactions.loc[
-            transactions["neighborhood"].isin(wanted_names)
-        ].reset_index(drop=True)
-        return filtered, counts, wanted_names
-
-    def align_choice_data(neighborhood_features, transactions, wanted_names):
-        choice_features = (
-            neighborhood_features.loc[lambda df: df["name_detail"].isin(wanted_names)]
-            .reset_index(drop=True)
-            .assign(neighborhood_idx=lambda df: np.arange(len(df)))
-            .set_index("neighborhood_idx")
-        )
-        name_to_idx = choice_features["name_detail"].to_dict()
-        name_to_idx = {name: idx for idx, name in name_to_idx.items()}
-        choice_transactions = transactions.assign(
-            neighborhood_idx=lambda df: df["neighborhood"].map(name_to_idx).astype(int)
-        ).reset_index(drop=True)
-        return choice_features, choice_transactions, name_to_idx
-
-    def compute_scale_audit(feature_frame, feature_columns):
-        rows = []
-        for column in feature_columns:
-            values = pd.to_numeric(feature_frame[column], errors="coerce")
-            finite = values.replace([np.inf, -np.inf], np.nan).dropna()
-            uniques = sorted(finite.unique().tolist()) if len(finite) <= 1000 else []
-            is_binary = len(uniques) <= 2 and set(uniques).issubset({0, 1})
-            abs_finite = finite.abs()
-            nonzero_abs = abs_finite.loc[abs_finite.gt(0)]
-            if finite.empty:
-                warning = "all missing"
-            elif is_binary:
-                warning = "binary"
-            elif abs_finite.quantile(0.75) > TARGET_SCALE_UPPER:
-                warning = "too large"
-            elif nonzero_abs.empty or nonzero_abs.median() < TARGET_SCALE_LOWER:
-                warning = "too small"
-            else:
-                warning = "ok"
-            rows.append(
-                {
-                    "feature": column,
-                    "missing": int(values.isna().sum()),
-                    "n_unique": int(values.nunique(dropna=True)),
-                    "min": finite.min() if not finite.empty else np.nan,
-                    "p25": finite.quantile(0.25) if not finite.empty else np.nan,
-                    "median": finite.median() if not finite.empty else np.nan,
-                    "p75": finite.quantile(0.75) if not finite.empty else np.nan,
-                    "max": finite.max() if not finite.empty else np.nan,
-                    "scale_warning": warning,
-                }
-            )
-        return pd.DataFrame(rows).round(4)
-
-    def compute_feature_diagnostics(feature_frame):
-        diagnostics = feature_frame.astype(float).copy()
-        correlation = diagnostics.corr().round(3)
-        corr_abs = correlation.abs().where(~np.eye(len(correlation), dtype=bool))
-        max_abs_correlation = (
-            round(float(corr_abs.max().max()), 3) if len(correlation) else 0
-        )
-
-        vif_rows = []
-        for feature in diagnostics.columns:
-            if len(diagnostics.columns) == 1:
-                vif_rows.append({"feature": feature, "vif": 1.0, "r2": 0.0})
-                continue
-            y = diagnostics[feature].to_numpy()
-            x = diagnostics.drop(columns=[feature]).to_numpy()
-            x = np.column_stack([np.ones(len(x)), x])
-            beta = np.linalg.lstsq(x, y, rcond=None)[0]
-            pred = x @ beta
-            ss_res = ((y - pred) ** 2).sum()
-            ss_tot = ((y - y.mean()) ** 2).sum()
-            r2 = 1 - ss_res / ss_tot if ss_tot else 0.0
-            vif_rows.append(
-                {
-                    "feature": feature,
-                    "vif": 1 / (1 - r2) if r2 < 1 else math.inf,
-                    "r2": r2,
-                }
-            )
-        vif = (
-            pd.DataFrame(vif_rows)
-            .sort_values("vif", ascending=False)
-            .reset_index(drop=True)
-            .round({"vif": 3, "r2": 3})
-        )
-        return diagnostics, correlation, vif, max_abs_correlation
-
-    def build_feature_diagnostics_frame(
-        neighborhood_features, transactions, static_cols, built_area_cols
-    ):
-        diagnostics = neighborhood_features.loc[:, static_cols].astype(float).copy()
-        diagnostics["log_built_area_ha"] = 0.0
-        year_weights = transactions["purchase_year"].value_counts(normalize=True)
-        for year, weight in year_weights.items():
-            built_col = f"built_area_{int(year)}"
-            if built_col not in built_area_cols:
-                raise ValueError(
-                    f"Missing built area column for year {year}: {built_col}"
-                )
-            diagnostics["log_built_area_ha"] += (
-                np.log1p(neighborhood_features[built_col].astype(float).div(10_000))
-                * weight
-            )
-        return diagnostics
-
-    def build_choice_dataframe(
-        neighborhood_features, transactions, static_cols, built_area_cols
-    ):
-        model_feature_cols = [*static_cols, "log_built_area_ha"]
-        static_series = (
-            neighborhood_features.loc[:, static_cols]
-            .reset_index(names="index")
-            .melt(id_vars="index")
-            .assign(index=lambda df: df["index"].astype(str))
-            .assign(variable=lambda df: df["variable"] + "_" + df["index"])
-            .drop(columns=["index"])
-            .set_index("variable")["value"]
-        )
-
-        dynamic_features = {}
-        for idx, row in neighborhood_features.loc[:, built_area_cols].iterrows():
-            area_by_year = {
-                int(col.rsplit("_", maxsplit=1)[1]): float(row[col])
-                for col in built_area_cols
-            }
-            dynamic_features[f"log_built_area_ha_{idx}"] = np.log1p(
-                transactions["purchase_year"]
-                .map(area_by_year)
-                .astype(float)
-                .div(10_000)
-            )
-
-        choice_frame = pd.concat(
-            [
-                transactions.loc[:, ["neighborhood_idx", "purchase_year"]].reset_index(
-                    drop=True
-                ),
-                pd.DataFrame(
-                    {key: value for key, value in static_series.items()},
-                    index=transactions.index,
-                ).reset_index(drop=True),
-                pd.DataFrame(dynamic_features).reset_index(drop=True),
-            ],
-            axis=1,
-        )
-        model_columns = [
-            "neighborhood_idx",
-            "purchase_year",
-            *[
-                f"{feature}_{idx}"
-                for idx in neighborhood_features.index
-                for feature in model_feature_cols
-            ],
-        ]
-        return choice_frame.loc[:, model_columns].copy(), model_feature_cols
-
-    def validate_choice_dataframe(choice_frame, model_feature_cols, n_alternatives):
-        numeric = choice_frame.drop(columns=["purchase_year"])
-        checks = [
-            {
-                "check": "no_missing_values",
-                "passed": not numeric.isna().any().any(),
-                "value": int(numeric.isna().sum().sum()),
+                "module": "features",
+                "responsibility": "feature catalog, scaling, prepared feature frame",
             },
             {
-                "check": "finite_values",
-                "passed": bool(np.isfinite(numeric.to_numpy(dtype=float)).all()),
-                "value": "all finite",
+                "module": "choice_data",
+                "responsibility": "transaction filter, choice set, choice frame validation",
             },
             {
-                "check": "no_missing_value_sentinel",
-                "passed": not numeric.eq(MISSING_VALUE_SENTINEL).any().any(),
-                "value": MISSING_VALUE_SENTINEL,
+                "module": "diagnostics",
+                "responsibility": "correlations, VIF, selected-spec diagnostics",
             },
             {
-                "check": "choice_ids_valid",
-                "passed": choice_frame["neighborhood_idx"]
-                .between(0, n_alternatives - 1)
-                .all(),
-                "value": f"0 to {n_alternatives - 1}",
+                "module": "specs",
+                "responsibility": "baseline and one-candidate specification tables",
             },
             {
-                "check": "has_free_betas",
-                "passed": len(model_feature_cols) > 0,
-                "value": len(model_feature_cols),
+                "module": "estimation",
+                "responsibility": "fast MNL screen, Biogeme fit, prediction summaries",
             },
         ]
-        return pd.DataFrame(checks)
-
-    def fit_fast_mnl_screen(
-        spec_id, static_cols, neighborhood_features, transactions, built_area_cols
-    ):
-        model_feature_cols = [*static_cols, "log_built_area_ha"]
-        y = transactions["neighborhood_idx"].astype(int).to_numpy()
-        years = transactions["purchase_year"].astype(int).to_numpy()
-        n_obs = len(y)
-        n_alt = len(neighborhood_features)
-        choice_rows = np.arange(n_obs)
-
-        year_to_log_built_area = {
-            int(col.rsplit("_", maxsplit=1)[1]): np.log1p(
-                neighborhood_features[col].astype(float).to_numpy() / 10_000
-            )
-            for col in built_area_cols
-        }
-        log_built_area_by_choice_year = np.vstack(
-            [year_to_log_built_area[int(year)] for year in years]
-        )
-        static_x = neighborhood_features.loc[:, static_cols].astype(float).to_numpy()
-        x = np.empty((n_obs, n_alt, len(model_feature_cols)), dtype=float)
-        x[:, :, : len(static_cols)] = static_x[None, :, :]
-        x[:, :, -1] = log_built_area_by_choice_year
-        chosen_x = x[choice_rows, y, :]
-
-        def nll(beta):
-            utility = x @ beta
-            return -float((chosen_x @ beta - logsumexp(utility, axis=1)).sum())
-
-        opt = minimize(
-            nll,
-            np.zeros(x.shape[2]),
-            method="L-BFGS-B",
-            options={"maxiter": 1000, "ftol": 1e-10, "gtol": 1e-6},
-        )
-        final_ll = -float(opt.fun)
-        n_params = len(model_feature_cols)
-        coefficient_frame = pd.DataFrame(
-            {
-                "spec_id": spec_id,
-                "feature": model_feature_cols,
-                "screen_coef": opt.x,
-            }
-        )
-        return (
-            {
-                "spec_id": spec_id,
-                "parameters": n_params,
-                "sample_size": n_obs,
-                "final_log_likelihood": final_ll,
-                "aic": 2 * n_params - 2 * final_ll,
-                "bic": math.log(n_obs) * n_params - 2 * final_ll,
-                "screen_converged": bool(opt.success),
-                "screen_message": str(opt.message),
-            },
-            coefficient_frame,
-        )
-
-    def make_biogeme_parameters():
-        params = Parameters()
-        for name, value in {
-            "generate_yaml": False,
-            "generate_html": False,
-            "generate_netcdf": False,
-            "save_validation_results": False,
-            "save_iterations": False,
-            "use_jit": True,
-            "numerically_safe": False,
-            "seed": 42,
-        }.items():
-            params.set_value(name=name, value=value)
-        return params
-
-    def fit_biogeme_model(
-        spec_id, static_cols, neighborhood_features, transactions, built_area_cols
-    ):
-        choice_frame, model_feature_cols = build_choice_dataframe(
-            neighborhood_features,
-            transactions,
-            static_cols,
-            built_area_cols,
-        )
-        validation = validate_choice_dataframe(
-            choice_frame,
-            model_feature_cols,
-            len(neighborhood_features),
-        )
-        if not validation["passed"].all():
-            failed = validation.loc[~validation["passed"], "check"].tolist()
-            raise ValueError(f"Choice frame validation failed for {spec_id}: {failed}")
-
-        database = db.Database(f"db_{safe_identifier(spec_id)}", choice_frame)
-        choice = Variable("neighborhood_idx")
-        beta_name_by_feature = {
-            feature: f"b_{safe_identifier(feature)}" for feature in model_feature_cols
-        }
-        if len(set(beta_name_by_feature.values())) != len(beta_name_by_feature):
-            raise ValueError(f"Duplicate beta names for {spec_id}")
-        betas = {
-            feature: Beta(beta_name, 0, None, None, 0)
-            for feature, beta_name in beta_name_by_feature.items()
-        }
-
-        utilities = {}
-        availability = {}
-        for idx in range(len(neighborhood_features)):
-            var_map = {
-                feature: Variable(f"{feature}_{idx}") for feature in model_feature_cols
-            }
-            utilities[idx] = sum(
-                betas[feature] * var_map[feature] for feature in model_feature_cols
-            )
-            availability[idx] = 1
-
-        log_probability = models.loglogit(utilities, availability, choice)
-        biogeme_model = BIOGEME(
-            database=database,
-            formulas=log_probability,
-            parameters=make_biogeme_parameters(),
-        )
-        biogeme_model.model_name = f"{BIOGEME_MODEL_PREFIX}_{safe_identifier(spec_id)}"
-        results = biogeme_model.estimate(recycle=False, run_bootstrap=False)
-        estimated_parameters = get_pandas_estimated_parameters(
-            estimation_results=results
-        )
-        feature_by_beta_name = {
-            value: key for key, value in beta_name_by_feature.items()
-        }
-        estimated_parameters = estimated_parameters.assign(
-            spec_id=spec_id,
-            feature=lambda df: df["Name"].map(feature_by_beta_name).fillna(df["Name"]),
-        )
-        raw_results = getattr(results, "raw_estimation_results", None)
-        optimization_messages = getattr(raw_results, "optimization_messages", {}) or {}
-
-        return {
-            "spec_id": spec_id,
-            "static_cols": static_cols,
-            "model_feature_cols": model_feature_cols,
-            "choice_frame": choice_frame,
-            "validation": validation,
-            "biogeme_model": biogeme_model,
-            "results": results,
-            "estimated_parameters": estimated_parameters,
-            "beta_name_by_feature": beta_name_by_feature,
-            "optimization_messages": optimization_messages,
-            "summary_row": {
-                "spec_id": spec_id,
-                "parameters": results.number_of_parameters,
-                "sample_size": results.sample_size,
-                "final_log_likelihood": results.final_log_likelihood,
-                "aic": results.akaike_information_criterion,
-                "bic": results.bayesian_information_criterion,
-                "algorithm_has_converged": bool(
-                    getattr(results, "algorithm_has_converged", False)
-                ),
-            },
-        }
-
-    def run_derivative_check(artifact):
-        try:
-            check = artifact["biogeme_model"].check_derivatives(verbose=False)
-            return pd.DataFrame(
-                [
-                    {
-                        "spec_id": artifact["spec_id"],
-                        "check_completed": True,
-                        "max_abs_gradient_error": float(
-                            np.max(np.abs(check.errors_gradient))
-                        ),
-                        "max_abs_hessian_error": float(
-                            np.max(np.abs(check.errors_hessian))
-                        ),
-                        "error": "",
-                    }
-                ]
-            )
-        except Exception as exc:
-            return pd.DataFrame(
-                [
-                    {
-                        "spec_id": artifact["spec_id"],
-                        "check_completed": False,
-                        "max_abs_gradient_error": np.nan,
-                        "max_abs_hessian_error": np.nan,
-                        "error": str(exc),
-                    }
-                ]
-            )
-
-    def predict_choice_shares(
-        artifact, neighborhood_features, transactions, built_area_cols
-    ):
-        params = (
-            artifact["estimated_parameters"].set_index("feature")["Value"].to_dict()
-        )
-        static_cols = artifact["static_cols"]
-        static_utility = neighborhood_features.loc[:, static_cols].astype(
-            float
-        ).to_numpy() @ np.array([params[col] for col in static_cols])
-        built_beta = params["log_built_area_ha"]
-        year_to_log_built_area = {
-            int(col.rsplit("_", maxsplit=1)[1]): np.log1p(
-                neighborhood_features[col].astype(float).to_numpy() / 10_000
-            )
-            for col in built_area_cols
-        }
-        probabilities = []
-        for year in transactions["purchase_year"].astype(int):
-            utility = static_utility + built_beta * year_to_log_built_area[int(year)]
-            probability = np.exp(utility - logsumexp(utility))
-            probabilities.append(probability)
-        predicted_share = np.vstack(probabilities).mean(axis=0)
-        observed_share = (
-            transactions["neighborhood_idx"]
-            .value_counts(normalize=True)
-            .reindex(neighborhood_features.index, fill_value=0)
-            .sort_index()
-            .to_numpy()
-        )
-        return pd.DataFrame(
-            {
-                "neighborhood_idx": neighborhood_features.index,
-                "neighborhood": neighborhood_features["name_detail"].to_numpy(),
-                "observed_share": observed_share,
-                "predicted_share": predicted_share,
-                "share_error": predicted_share - observed_share,
-                "abs_share_error": np.abs(predicted_share - observed_share),
-            }
-        ).sort_values("observed_share", ascending=False)
-
-    return (
-        align_choice_data,
-        build_feature_catalog,
-        build_feature_diagnostics_frame,
-        compute_feature_diagnostics,
-        compute_scale_audit,
-        fit_biogeme_model,
-        fit_fast_mnl_screen,
-        predict_choice_shares,
-        prepare_neighborhood_features,
-        prepare_transactions,
-        run_derivative_check,
-        safe_identifier,
     )
+    modeling_helpers_summary
+    return
 
 
 @app.cell(hide_code=True)
@@ -918,7 +193,7 @@ def _():
 
 
 @app.cell
-def _(build_feature_catalog, df_neighborhood_raw):
+def _(df_neighborhood_raw):
 
     feature_catalog = build_feature_catalog(df_neighborhood_raw)
     feature_catalog_summary = (
@@ -951,7 +226,7 @@ def _(feature_catalog):
 
 
 @app.cell
-def _(df_neighborhood_raw, feature_catalog, prepare_neighborhood_features):
+def _(df_neighborhood_raw, feature_catalog):
     prepared_neighborhood_features = prepare_neighborhood_features(
         df_neighborhood_raw,
         feature_catalog,
@@ -1016,13 +291,16 @@ def _(df_neighborhood_raw, feature_catalog, prepare_neighborhood_features):
 
 @app.cell
 def _(
-    compute_scale_audit,
+    TARGET_SCALE_LOWER,
+    TARGET_SCALE_UPPER,
     model_ready_feature_cols,
     prepared_neighborhood_features,
 ):
-
     scale_audit = compute_scale_audit(
-        prepared_neighborhood_features, model_ready_feature_cols
+        prepared_neighborhood_features,
+        model_ready_feature_cols,
+        target_scale_lower=TARGET_SCALE_LOWER,
+        target_scale_upper=TARGET_SCALE_UPPER,
     )
     scale_audit
     return (scale_audit,)
@@ -1056,10 +334,8 @@ def _(
     MODELING_YEAR_MAX,
     MODELING_YEAR_MIN,
     TRANSACTION_THRESH,
-    align_choice_data,
     df_neighborhood_raw,
     df_transactions_raw,
-    prepare_transactions,
     prepared_neighborhood_features,
 ):
 
@@ -1168,59 +444,21 @@ def _(
     job_candidate_cols,
     logistics_candidate_cols,
     mfg_candidate_cols,
-    safe_identifier,
 ):
-    model_specs = {
-        "baseline_no_jobs": {
-            "family": "baseline",
-            "static_cols": base_control_cols,
-            "candidate_feature": None,
-        }
-    }
-    for _feature in job_candidate_cols:
-        model_specs[f"job__{safe_identifier(_feature)}"] = {
-            "family": "job_accessibility",
-            "static_cols": [_feature, *base_control_cols],
-            "candidate_feature": _feature,
-        }
-    for _feature in mfg_candidate_cols:
-        model_specs[f"mfg__{safe_identifier(_feature)}"] = {
-            "family": "manufacturing_cluster",
-            "static_cols": [_feature, *base_control_cols],
-            "candidate_feature": _feature,
-        }
-    for _feature in logistics_candidate_cols:
-        model_specs[f"logistics__{safe_identifier(_feature)}"] = {
-            "family": "logistics_cluster",
-            "static_cols": [_feature, *base_control_cols],
-            "candidate_feature": _feature,
-        }
-
-    _model_spec_summary_rows = []
-    for _spec_id, _spec in model_specs.items():
-        _static_cols = _spec["static_cols"]
-        if not isinstance(_static_cols, list):
-            raise TypeError("model_specs static_cols must be a list")
-        _model_spec_summary_rows.append(
-            {
-                "spec_id": _spec_id,
-                "family": _spec["family"],
-                "candidate_feature": _spec["candidate_feature"],
-                "static_features": len(_static_cols),
-                "all_features": ", ".join(_static_cols + ["log_built_area_ha"]),
-            }
-        )
-    model_spec_summary = pd.DataFrame(_model_spec_summary_rows)
+    model_specs, model_spec_summary = build_single_candidate_model_specs(
+        base_control_cols,
+        job_candidate_cols,
+        mfg_candidate_cols,
+        logistics_candidate_cols,
+    )
     model_spec_summary
     return model_spec_summary, model_specs
 
 
 @app.cell
 def _(
-    build_feature_diagnostics_frame,
     built_area_cols,
     choice_neighborhood_features,
-    compute_feature_diagnostics,
     df_transactions_model,
     model_specs,
 ):
@@ -1272,7 +510,6 @@ def _(
     built_area_cols,
     choice_neighborhood_features,
     df_transactions_model,
-    fit_fast_mnl_screen,
     model_specs,
 ):
 
@@ -1480,14 +717,14 @@ def _():
 
 @app.cell
 def _(
+    BIOGEME_MODEL_PREFIX,
+    MISSING_VALUE_SENTINEL,
     built_area_cols,
     choice_neighborhood_features,
     df_transactions_model,
     finalist_specs,
-    fit_biogeme_model,
     model_spec_summary,
 ):
-
     biogeme_artifacts = {}
     for _spec_id, _spec in finalist_specs.items():
         biogeme_artifacts[_spec_id] = fit_biogeme_model(
@@ -1496,6 +733,8 @@ def _(
             choice_neighborhood_features,
             df_transactions_model,
             built_area_cols,
+            BIOGEME_MODEL_PREFIX,
+            MISSING_VALUE_SENTINEL,
         )
 
     biogeme_model_comparison = (
@@ -1559,7 +798,7 @@ def _(biogeme_artifacts, biogeme_model_comparison, model_specs):
 
 
 @app.cell
-def _(run_derivative_check, selected_artifact):
+def _(selected_artifact):
 
     selected_derivative_check = run_derivative_check(selected_artifact)
     selected_derivative_check
@@ -1635,10 +874,8 @@ def _(selected_estimated_parameters):
 
 @app.cell
 def _(
-    build_feature_diagnostics_frame,
     built_area_cols,
     choice_neighborhood_features,
-    compute_feature_diagnostics,
     df_transactions_model,
     selected_static_cols,
 ):
@@ -1685,7 +922,6 @@ def _(
     built_area_cols,
     choice_neighborhood_features,
     df_transactions_model,
-    predict_choice_shares,
     selected_artifact,
 ):
 
