@@ -9,15 +9,64 @@ import shapely
 
 from housing_choice.sector_clusters import (
     LOGISTICS_CLUSTER_CONFIG,
+    SEMANTIC_SECTOR_CLUSTER_CONFIGS,
     SectorClusterConfig,
     assign_connected_components,
     build_hotspot_clusters,
+    build_semantic_sector_cluster_configs,
     compute_neighborhood_cluster_features,
     empty_cluster_exposure_record,
 )
 
 
 class SectorClusterTest(TestCase):
+    def test_semantic_sector_configs_cover_existing_job_groups(self) -> None:
+        expected_prefixes = {
+            "mfg",
+            "construction",
+            "logistics",
+            "commerce",
+            "business_services",
+            "care_education_health",
+            "local_services",
+            "public_admin",
+        }
+
+        assert {
+            config.output_prefix for config in SEMANTIC_SECTOR_CLUSTER_CONFIGS
+        } == expected_prefixes
+
+    def test_semantic_sector_configs_exclude_all_aggregate(self) -> None:
+        assert all(
+            config.sector_name != "all" for config in SEMANTIC_SECTOR_CLUSTER_CONFIGS
+        )
+
+    def test_semantic_sector_configs_have_unique_output_prefixes(self) -> None:
+        prefixes = [config.output_prefix for config in SEMANTIC_SECTOR_CLUSTER_CONFIGS]
+
+        assert len(prefixes) == len(set(prefixes))
+
+    def test_semantic_sector_config_builder_respects_diagnostics_dir(self) -> None:
+        configs = build_semantic_sector_cluster_configs(Path("custom/diagnostics"))
+        diagnostics_paths = {
+            config.output_prefix: config.diagnostics_path for config in configs
+        }
+
+        assert diagnostics_paths["mfg"] == Path(
+            "custom/diagnostics/mfg_spatial_diagnostics.gpkg",
+        )
+        assert diagnostics_paths["logistics"] == Path(
+            "custom/diagnostics/logistics_spatial_diagnostics.gpkg",
+        )
+
+    def test_existing_named_configs_stay_compatible(self) -> None:
+        config_by_prefix = {
+            config.output_prefix: config for config in SEMANTIC_SECTOR_CLUSTER_CONFIGS
+        }
+
+        assert config_by_prefix["logistics"] == LOGISTICS_CLUSTER_CONFIG
+        assert config_by_prefix["mfg"].sector_name == "manufacturing"
+
     def test_logistics_column_names_match_prefix_contract(self) -> None:
         record = empty_cluster_exposure_record(
             neighborhood_idx=7,

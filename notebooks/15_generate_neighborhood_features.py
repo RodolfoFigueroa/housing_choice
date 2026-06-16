@@ -4,6 +4,7 @@ __generated_with = "0.23.9"
 app = marimo.App(width="medium")
 
 with app.setup:
+    import itertools
     import os
     import re
     from logging import INFO
@@ -24,13 +25,7 @@ with app.setup:
         calculate_accessibility_services,
         load_parks,
     )
-    from housing_choice.sector_clusters import (
-        LOGISTICS_CLUSTER_CONFIG,
-        MANUFACTURING_CLUSTER_CONFIG,
-        band_suffix,
-        build_sector_cluster_analysis,
-        export_sector_cluster_diagnostics,
-    )
+    from housing_choice.sector_clusters import band_suffix
 
     ee.Initialize()
 
@@ -40,7 +35,7 @@ def md_overview():
     mo.md("""
     # Neighborhood feature build
 
-    This notebook assembles the canonical modeling feature table from upstream artifacts. Cleaned neighborhood geometries and cleaned transaction names now come from `07_clean_neighborhoods.py`; this notebook adds cluster, accessibility, travel-time, and built-area features before writing `col_final.gpkg` and `transactions_final.parquet`.
+    This notebook assembles the canonical modeling feature table from upstream artifacts. Cleaned neighborhood geometries and cleaned transaction names come from `07_clean_neighborhoods.py`; economic-sector cluster features come from `08_cluster_statistics.py`; this notebook adds accessibility, travel-time, and built-area features before writing `col_final.gpkg` and `transactions_final.parquet`.
     """)
     return
 
@@ -156,7 +151,7 @@ def _(df_transactions, generated_path):
                 "path": str(neighborhoods_clean_path),
                 "rows": len(df_col),
                 "unique_name_detail": df_col["name_detail"].nunique(),
-                "crs": df_col.crs.to_string(),
+                "crs": df_col.crs.to_string() if df_col.crs is not None else None,
                 "all_names_in_transactions": bool(
                     df_col["name_detail"].isin(df_transactions["address"]).all()
                 ),
@@ -172,141 +167,159 @@ def md_sector_cluster_features():
     mo.md("""
     ## Economic-sector cluster features
 
-    This section derives neighborhood exposure to employment clusters from DENUE establishments. The shared sector-cluster pipeline is run for manufacturing and logistics, and the resulting neighborhood-level features are written directly into `col_final.gpkg`.
+    Cluster statistics are computed upstream in `08_cluster_statistics.py`. This section reads the neighborhood-level cluster feature artifact and summary tables, then checks that the artifact is aligned with the cleaned neighborhood universe before joining it into the final feature table.
     """)
     return
 
 
 @app.cell
-def sector_cluster_analysis(df_col, engine):
-    mfg_cluster_analysis = build_sector_cluster_analysis(
-        df_col,
-        engine,
-        MANUFACTURING_CLUSTER_CONFIG,
+def sector_cluster_analysis(generated_path):
+    sector_cluster_feature_path = (
+        generated_path / "sector_cluster_neighborhood_features.gpkg"
     )
-    logistics_cluster_analysis = build_sector_cluster_analysis(
-        df_col,
-        engine,
-        LOGISTICS_CLUSTER_CONFIG,
+    sector_cluster_config_summary_path = (
+        generated_path / "sector_cluster_config_summary.parquet"
     )
-    sector_cluster_results = [mfg_cluster_analysis, logistics_cluster_analysis]
+    sector_cluster_point_summary_path = (
+        generated_path / "sector_cluster_point_summary.parquet"
+    )
+    sector_cluster_grid_summary_path = (
+        generated_path / "sector_cluster_grid_summary.parquet"
+    )
+    sector_cluster_spatial_stats_summary_path = (
+        generated_path / "sector_cluster_spatial_stats_summary.parquet"
+    )
+    sector_cluster_summary_path = generated_path / "sector_cluster_summary.parquet"
+    sector_cluster_neighborhood_feature_summary_path = (
+        generated_path / "sector_cluster_neighborhood_feature_summary.parquet"
+    )
+    sector_cluster_threshold_audit_path = (
+        generated_path / "sector_cluster_threshold_audit.parquet"
+    )
 
-    sector_cluster_point_summary = pd.concat(
-        [result.point_summary for result in sector_cluster_results],
-        ignore_index=True,
+    sector_cluster_neighborhood_features_gdf = gpd.read_file(
+        sector_cluster_feature_path,
     )
-    sector_cluster_point_summary
-    return (sector_cluster_results,)
+    sector_cluster_config_summary = pd.read_parquet(
+        sector_cluster_config_summary_path,
+    )
+    sector_cluster_point_summary = pd.read_parquet(
+        sector_cluster_point_summary_path,
+    )
+    sector_cluster_grid_summary = pd.read_parquet(sector_cluster_grid_summary_path)
+    sector_cluster_spatial_stats_summary = pd.read_parquet(
+        sector_cluster_spatial_stats_summary_path,
+    )
+    sector_cluster_summary = pd.read_parquet(sector_cluster_summary_path)
+    sector_cluster_neighborhood_feature_summary = pd.read_parquet(
+        sector_cluster_neighborhood_feature_summary_path,
+    )
+    sector_cluster_threshold_audit = pd.read_parquet(
+        sector_cluster_threshold_audit_path,
+    )
+
+    sector_cluster_artifact_summary = pd.DataFrame(
+        [
+            {
+                "artifact": "sector_cluster_neighborhood_features",
+                "path": str(sector_cluster_feature_path),
+                "rows": len(sector_cluster_neighborhood_features_gdf),
+                "columns": len(sector_cluster_neighborhood_features_gdf.columns),
+            },
+            {
+                "artifact": "sector_cluster_config_summary",
+                "path": str(sector_cluster_config_summary_path),
+                "rows": len(sector_cluster_config_summary),
+                "columns": len(sector_cluster_config_summary.columns),
+            },
+            {
+                "artifact": "sector_cluster_threshold_audit",
+                "path": str(sector_cluster_threshold_audit_path),
+                "rows": len(sector_cluster_threshold_audit),
+                "columns": len(sector_cluster_threshold_audit.columns),
+            },
+        ]
+    )
+    sector_cluster_artifact_summary
+    return (
+        sector_cluster_config_summary,
+        sector_cluster_neighborhood_features_gdf,
+        sector_cluster_summary,
+    )
 
 
 @app.cell(hide_code=True)
 def md_sector_cluster_outputs():
     mo.md("""
-    ### Cluster features and diagnostics
+    ### Cluster artifact contract
 
-    For each sector, hotspot cells are dissolved into ranked clusters and translated into neighborhood exposure measures: proximity, overlap, jobs within distance bands, and gravity-style exposure. Diagnostic layers are exported separately for map review and sanity checks.
+    The GeoPackage must contain `name`, `name_detail`, `geometry`, and sector-prefixed cluster exposure columns. The parquet summaries keep configuration, point totals, grid totals, spatial statistics, selected clusters, neighborhood summaries, and threshold-audit context available without recomputing the cluster pipeline.
     """)
     return
 
 
 @app.cell
-def sector_cluster_neighborhood_features(sector_cluster_results):
-    sector_cluster_neighborhood_feature_frame = pd.concat(
-        [result.neighborhood_feature_frame for result in sector_cluster_results],
-        axis=1,
-    )
+def sector_cluster_neighborhood_features(
+    sector_cluster_config_summary,
+    sector_cluster_neighborhood_features_gdf,
+    sector_cluster_summary,
+):
+    sector_cluster_identity_cols = {"name", "name_detail", "geometry"}
     sector_cluster_feature_cols = [
         column
-        for result in sector_cluster_results
-        for column in result.cluster_feature_cols
+        for column in sector_cluster_neighborhood_features_gdf.columns
+        if column not in sector_cluster_identity_cols
     ]
-    sector_cluster_neighborhood_features = {
-        result.config.output_prefix: result.neighborhood_features
-        for result in sector_cluster_results
-    }
-    sector_cluster_summary = pd.concat(
-        [result.cluster_summary for result in sector_cluster_results],
-        ignore_index=True,
-    )
-
-    def _tidy_neighborhood_feature_summary(result):
-        prefix = result.config.output_prefix
-        return (
-            result.neighborhood_features[
-                [
-                    "name_detail",
-                    f"nearest_{prefix}_cluster_rank",
-                    f"nearest_{prefix}_cluster_jobs",
-                    f"{prefix}_distance_nearest_cluster_km",
-                    f"{prefix}_jobs_within_2km",
-                    f"log_{prefix}_jobs_within_2km",
-                    f"{prefix}_cluster_gravity_inv_sq",
-                    f"log_{prefix}_cluster_gravity_inv_sq",
-                    f"intersects_{prefix}_cluster",
-                    f"within_1km_of_{prefix}_cluster",
-                ]
-            ]
-            .rename(
-                columns={
-                    f"nearest_{prefix}_cluster_rank": "nearest_cluster_rank",
-                    f"nearest_{prefix}_cluster_jobs": "nearest_cluster_jobs",
-                    f"{prefix}_distance_nearest_cluster_km": "distance_nearest_cluster_km",
-                    f"{prefix}_jobs_within_2km": "jobs_within_2km",
-                    f"log_{prefix}_jobs_within_2km": "log_jobs_within_2km",
-                    f"{prefix}_cluster_gravity_inv_sq": "cluster_gravity_inv_sq",
-                    f"log_{prefix}_cluster_gravity_inv_sq": "log_cluster_gravity_inv_sq",
-                    f"intersects_{prefix}_cluster": "intersects_cluster",
-                    f"within_1km_of_{prefix}_cluster": "within_1km_of_cluster",
-                }
-            )
-            .assign(sector=result.config.sector_name)
-            .loc[
-                :,
-                [
-                    "sector",
-                    "name_detail",
-                    "nearest_cluster_rank",
-                    "nearest_cluster_jobs",
-                    "distance_nearest_cluster_km",
-                    "jobs_within_2km",
-                    "log_jobs_within_2km",
-                    "cluster_gravity_inv_sq",
-                    "log_cluster_gravity_inv_sq",
-                    "intersects_cluster",
-                    "within_1km_of_cluster",
-                ],
-            ]
+    sector_cluster_neighborhood_feature_frame = (
+        sector_cluster_neighborhood_features_gdf.drop(
+            columns=[
+                column
+                for column in ["name", "geometry"]
+                if column in sector_cluster_neighborhood_features_gdf.columns
+            ],
         )
-
-    sector_cluster_feature_summary = pd.concat(
-        [
-            _tidy_neighborhood_feature_summary(result)
-            for result in sector_cluster_results
-        ],
-        ignore_index=True,
-    ).sort_values(["sector", "distance_nearest_cluster_km"])
+        .set_index("name_detail")
+        .loc[:, sector_cluster_feature_cols]
+    )
+    sector_cluster_expected_prefixes = sector_cluster_config_summary[
+        "output_prefix"
+    ].tolist()
+    sector_cluster_distance_bands_by_prefix = {
+        output_prefix: tuple(float(value) for value in bands_string.split(","))
+        for output_prefix, bands_string in sector_cluster_config_summary[
+            ["output_prefix", "distance_bands_km"]
+        ].itertuples(index=False, name=None)
+    }
 
     sector_cluster_summary
     return (
+        sector_cluster_distance_bands_by_prefix,
+        sector_cluster_expected_prefixes,
         sector_cluster_feature_cols,
         sector_cluster_neighborhood_feature_frame,
-        sector_cluster_neighborhood_features,
     )
 
 
 @app.cell
-def sector_cluster_diagnostics_export(sector_cluster_results):
+def sector_cluster_diagnostics_export(sector_cluster_config_summary):
     sector_cluster_diagnostics_paths = {
-        result.config.output_prefix: export_sector_cluster_diagnostics(result)
-        for result in sector_cluster_results
+        output_prefix: Path(diagnostics_path)
+        for output_prefix, diagnostics_path in sector_cluster_config_summary[
+            ["output_prefix", "diagnostics_path"]
+        ].itertuples(index=False, name=None)
     }
 
-    pd.DataFrame(
+    sector_cluster_diagnostics_summary = pd.DataFrame(
         [
-            {"sector": prefix, "diagnostics_path": str(path)}
-            for prefix, path in sector_cluster_diagnostics_paths.items()
+            {
+                "output_prefix": output_prefix,
+                "diagnostics_path": str(path),
+                "exists": path.exists(),
+            }
+            for output_prefix, path in sector_cluster_diagnostics_paths.items()
         ]
     )
+    sector_cluster_diagnostics_summary
     return (sector_cluster_diagnostics_paths,)
 
 
@@ -497,7 +510,7 @@ def md_final_export():
     mo.md("""
     ## Canonical neighborhood export
 
-    The final neighborhood table combines cleaned geometries, accessibility features, travel times, built-area history, and sector-cluster exposure. This section writes `col_final.gpkg`, which should be the only source used by later notebooks for neighborhood-level features.
+    The final neighborhood table combines cleaned geometries, accessibility features, travel times, built-area history, and precomputed sector-cluster exposure. This section writes `col_final.gpkg`, which should be the only source used by later notebooks for neighborhood-level features.
     """)
     return
 
@@ -544,7 +557,7 @@ def md_validation():
     mo.md("""
     ## Export validation
 
-    The validation cell checks row counts, uniqueness, sector-cluster feature presence, distance sanity, monotonic distance-band totals, diagnostics output, and removal of the legacy manufacturing sidecar. It is meant to make the feature-export contract visible before downstream analysis notebooks consume the outputs.
+    The validation cell checks row counts, uniqueness, sector-cluster artifact alignment, expected sector-cluster feature presence, distance sanity, monotonic distance-band totals, diagnostics outputs, and removal of the legacy manufacturing sidecar. It is meant to make the feature-export contract visible before downstream analysis notebooks consume the outputs.
     """)
     return
 
@@ -555,9 +568,10 @@ def sector_cluster_feature_validation(
     df_final,
     generated_path,
     sector_cluster_diagnostics_paths,
+    sector_cluster_distance_bands_by_prefix,
+    sector_cluster_expected_prefixes,
     sector_cluster_feature_cols,
-    sector_cluster_neighborhood_features,
-    sector_cluster_results,
+    sector_cluster_neighborhood_features_gdf,
 ):
     legacy_mfg_cluster_feature_output_path = Path(
         generated_path / "mfg_cluster_neighborhood_features.gpkg"
@@ -568,6 +582,23 @@ def sector_cluster_feature_validation(
     _missing_feature_cols = sorted(
         set(sector_cluster_feature_cols) - set(df_final.columns)
     )
+    _name_detail_symmetric_diff = sorted(
+        set(df_col["name_detail"]).symmetric_difference(
+            set(sector_cluster_neighborhood_features_gdf["name_detail"]),
+        ),
+    )
+    _missing_prefix_core_columns = []
+    for _prefix in sector_cluster_expected_prefixes:
+        _required_columns = [
+            f"nearest_{_prefix}_cluster_jobs",
+            f"{_prefix}_distance_nearest_cluster_km",
+            f"log_{_prefix}_jobs_within_2km",
+            f"log_{_prefix}_cluster_gravity_inv_sq",
+        ]
+        _missing_prefix_core_columns.extend(
+            column for column in _required_columns if column not in df_final.columns
+        )
+
     _validation_rows = [
         {
             "check": "df_final_count_matches_df_col",
@@ -580,9 +611,24 @@ def sector_cluster_feature_validation(
             "value": int(df_final["name_detail"].nunique()),
         },
         {
+            "check": "sector_cluster_artifact_count_matches_df_col",
+            "passed": len(sector_cluster_neighborhood_features_gdf) == len(df_col),
+            "value": len(sector_cluster_neighborhood_features_gdf),
+        },
+        {
+            "check": "sector_cluster_name_detail_alignment",
+            "passed": len(_name_detail_symmetric_diff) == 0,
+            "value": ", ".join(_name_detail_symmetric_diff[:10]),
+        },
+        {
             "check": "sector_cluster_feature_columns_present",
             "passed": len(_missing_feature_cols) == 0,
             "value": ", ".join(_missing_feature_cols),
+        },
+        {
+            "check": "expected_sector_core_columns_present",
+            "passed": len(_missing_prefix_core_columns) == 0,
+            "value": ", ".join(_missing_prefix_core_columns),
         },
         {
             "check": "col_final_written",
@@ -591,24 +637,21 @@ def sector_cluster_feature_validation(
         },
     ]
 
-    for _result in sector_cluster_results:
-        _prefix = _result.config.output_prefix
-        _features = sector_cluster_neighborhood_features[_prefix]
+    for _prefix, _distance_bands in sector_cluster_distance_bands_by_prefix.items():
         _distance_col = f"{_prefix}_distance_nearest_cluster_km"
-        _distances = df_final[_distance_col].dropna()
+        if _distance_col in df_final.columns:
+            _distances = df_final[_distance_col].dropna()
+            _distances_nonnegative = _distances.ge(0).all()
+            _min_distance = float(_distances.min()) if not _distances.empty else np.nan
+        else:
+            _distances_nonnegative = False
+            _min_distance = np.nan
         _validation_rows.extend(
             [
                 {
-                    "check": f"{_prefix}_neighborhood_count_matches_df_col",
-                    "passed": len(_features) == len(df_col),
-                    "value": len(_features),
-                },
-                {
                     "check": f"{_prefix}_distances_nonnegative",
-                    "passed": _distances.ge(0).all(),
-                    "value": float(_distances.min())
-                    if not _distances.empty
-                    else np.nan,
+                    "passed": _distances_nonnegative,
+                    "value": _min_distance,
                 },
                 {
                     "check": f"{_prefix}_diagnostics_written",
@@ -617,20 +660,22 @@ def sector_cluster_feature_validation(
                 },
             ]
         )
-        for _lower_band, _upper_band in zip(
-            _result.config.distance_bands_km,
-            _result.config.distance_bands_km[1:],
-            strict=False,
-        ):
+        for _lower_band, _upper_band in itertools.pairwise(_distance_bands):
             _lower_col = f"{_prefix}_jobs_within_{band_suffix(_lower_band)}"
             _upper_col = f"{_prefix}_jobs_within_{band_suffix(_upper_band)}"
+            _has_band_cols = (
+                _lower_col in df_final.columns and _upper_col in df_final.columns
+            )
+            _is_monotone = (
+                bool((df_final[_upper_col] >= df_final[_lower_col]).all())
+                if _has_band_cols
+                else False
+            )
             _validation_rows.append(
                 {
                     "check": f"{_prefix}_{_upper_col}_ge_{_lower_col}",
-                    "passed": bool(
-                        (df_final[_upper_col] >= df_final[_lower_col]).all()
-                    ),
-                    "value": bool((df_final[_upper_col] >= df_final[_lower_col]).all()),
+                    "passed": _is_monotone,
+                    "value": _is_monotone,
                 }
             )
 

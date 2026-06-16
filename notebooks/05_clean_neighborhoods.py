@@ -3,9 +3,18 @@ import marimo
 __generated_with = "0.23.9"
 app = marimo.App(width="medium")
 
+with app.setup:
+    import os
+    from pathlib import Path
+
+    import geopandas as gpd
+    import marimo as mo
+    import pandas as pd
+    from pyproj import CRS
+
 
 @app.cell(hide_code=True)
-def md_overview(mo):
+def md_overview():
     mo.md("""
     # Clean Neighborhoods
 
@@ -16,47 +25,29 @@ def md_overview(mo):
 
 @app.cell
 def _():
-    import os
-    from pathlib import Path
-
-    import geopandas as gpd
-    import marimo as mo
-    import pandas as pd
-    from pyproj import CRS
 
     data_path = Path(os.environ["DATA_PATH"])
     generated_path = data_path / "generated"
     neighborhoods_clean_path = generated_path / "neighborhoods_clean.gpkg"
     transactions_clean_path = generated_path / "transactions_clean.parquet"
+    return data_path, neighborhoods_clean_path, transactions_clean_path
+
+
+@app.function
+def clean_fracc_col(col: pd.Series) -> pd.Series:
     return (
-        CRS,
-        data_path,
-        gpd,
-        mo,
-        neighborhoods_clean_path,
-        pd,
-        transactions_clean_path,
+        col.str.casefold()
+        .str.normalize("NFKD")
+        .str.encode("ascii", errors="ignore")
+        .str.decode("utf-8")
+        .str.replace(r"fracc(\.|ionamiento)?", "", regex=True)
+        .str.replace("desarrollo urbano", "")
+        .str.strip()
     )
 
 
-@app.cell
-def _(pd):
-    def clean_fracc_col(col: pd.Series) -> pd.Series:
-        return (
-            col.str.casefold()
-            .str.normalize("NFKD")
-            .str.encode("ascii", errors="ignore")
-            .str.decode("utf-8")
-            .str.replace(r"fracc(\.|ionamiento)?", "", regex=True)
-            .str.replace("desarrollo urbano", "")
-            .str.strip()
-        )
-
-    return (clean_fracc_col,)
-
-
 @app.cell(hide_code=True)
-def md_transactions(mo):
+def md_transactions():
     mo.md("""
     ## Transaction Names
 
@@ -66,7 +57,7 @@ def md_transactions(mo):
 
 
 @app.cell
-def _(clean_fracc_col, data_path, pd):
+def _(data_path):
     df_transactions_raw = pd.read_excel(
         data_path
         / "processing"
@@ -137,7 +128,7 @@ def _(clean_fracc_col, data_path, pd):
 
 
 @app.cell(hide_code=True)
-def md_neighborhoods(mo):
+def md_neighborhoods():
     mo.md("""
     ## Neighborhood Geometry Normalization
 
@@ -146,49 +137,39 @@ def md_neighborhoods(mo):
     return
 
 
-@app.cell
-def _(CRS, gpd, pd):
-    def merge_and_concat(
-        df: gpd.GeoDataFrame | pd.DataFrame,
-        mask: pd.Series,
-        *,
-        name: str,
-        name_detail: str,
-        access: str,
-        crs: CRS | str,
-    ) -> gpd.GeoDataFrame:
-        df_sol = (
-            pd.Series(
-                {
-                    "name": name,
-                    "name_detail": name_detail,
-                    "geometry": df.loc[mask, "geometry"].union_all(),
-                    "access": access,
-                }
-            )
-            .to_frame()
-            .transpose()
+@app.function
+def merge_and_concat(
+    df: gpd.GeoDataFrame | pd.DataFrame,
+    mask: pd.Series,
+    *,
+    name: str,
+    name_detail: str,
+    access: str,
+    crs: CRS | str,
+) -> gpd.GeoDataFrame:
+    df_sol = (
+        pd.Series(
+            {
+                "name": name,
+                "name_detail": name_detail,
+                "geometry": df.loc[mask, "geometry"].union_all(),
+                "access": access,
+            }
         )
-        return pd.concat(
-            [
-                df.loc[~mask],
-                df_sol,
-            ],
-            ignore_index=True,
-        ).pipe(lambda frame: gpd.GeoDataFrame(frame, geometry="geometry", crs=crs))
-
-    return (merge_and_concat,)
+        .to_frame()
+        .transpose()
+    )
+    return pd.concat(
+        [
+            df.loc[~mask],
+            df_sol,
+        ],
+        ignore_index=True,
+    ).pipe(lambda frame: gpd.GeoDataFrame(frame, geometry="geometry", crs=crs))
 
 
 @app.cell
-def _(
-    clean_fracc_col,
-    data_path,
-    df_transactions_clean,
-    gpd,
-    merge_and_concat,
-    pd,
-):
+def _(data_path, df_transactions_clean):
     df_neighborhoods_raw = (
         gpd.read_file(
             data_path / "initial" / "lim_cols_cp",
@@ -213,7 +194,8 @@ def _(
 
     source_crs = _df_col.crs
     if source_crs is None:
-        raise ValueError("Neighborhood source CRS is missing")
+        err = "Neighborhood source CRS is missing"
+        raise ValueError(err)
 
     # == Parajes de puebla == #
     parajes_mask = _df_col["name"] == "parajes de puebla"
@@ -321,7 +303,7 @@ def _(
 
 
 @app.cell(hide_code=True)
-def md_validation(mo):
+def md_validation():
     mo.md("""
     ## Validation And Export
 
@@ -334,7 +316,6 @@ def md_validation(mo):
 def _(
     df_neighborhoods_clean,
     df_transactions_clean,
-    pd,
     unmatched_transaction_addresses,
 ):
     neighborhood_validation = pd.DataFrame(
@@ -386,7 +367,6 @@ def _(
     df_neighborhoods_clean,
     df_transactions_clean,
     neighborhoods_clean_path,
-    pd,
     transactions_clean_path,
 ):
     if neighborhoods_clean_path.exists():

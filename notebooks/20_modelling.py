@@ -37,7 +37,7 @@ def _():
     mo.md("""
     # Housing Choice Modelling
 
-    Clean modelling workflow for neighborhood choice models. The notebook consumes the canonical neighborhood feature export from 08_generate_neighborhood_features.py and keeps exploratory screening separate from final Biogeme estimation.
+    Clean modelling workflow for neighborhood choice models. The notebook consumes the canonical neighborhood feature export from `09_generate_neighborhood_features.py` and keeps exploratory screening separate from final Biogeme estimation.
     """)
     return
 
@@ -119,7 +119,7 @@ def _():
     mo.md("""
     ## Data Inputs
 
-    Load the canonical processed inputs. The neighborhood table is produced by 08_generate_neighborhood_features.py; the transaction table is filtered to the same neighborhood naming convention.
+    Load the canonical processed inputs. The neighborhood table is produced by `09_generate_neighborhood_features.py`; the transaction table is filtered to the same neighborhood naming convention.
     """)
     return
 
@@ -353,7 +353,7 @@ def _(
     (
         choice_neighborhood_features,
         df_transactions_model,
-        name_to_idx_map,
+        _name_to_idx_map,
     ) = align_choice_data(
         prepared_neighborhood_features,
         df_transactions_model_base,
@@ -491,7 +491,7 @@ def _(
         .reset_index(drop=True)
         .round({"max_abs_correlation": 3, "max_vif": 3})
     )
-    spec_vif_detail = pd.concat(_spec_vif_frames, ignore_index=True)
+    _spec_vif_detail = pd.concat(_spec_vif_frames, ignore_index=True)
     spec_diagnostics_summary
     return
 
@@ -900,10 +900,10 @@ def _(
         built_area_cols,
     )
     (
-        selected_feature_diagnostics,
+        _,
         selected_feature_correlation,
         selected_feature_vif,
-        selected_max_abs_correlation,
+        _,
     ) = compute_feature_diagnostics(selected_diagnostics_frame)
     selected_feature_vif
     return selected_diagnostics_frame, selected_feature_correlation

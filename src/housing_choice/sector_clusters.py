@@ -66,19 +66,46 @@ class SectorClusterResult:
     neighborhood_feature_summary: pd.DataFrame
 
 
-MANUFACTURING_CLUSTER_CONFIG = SectorClusterConfig(
-    sector_name="manufacturing",
-    output_prefix="mfg",
-    scian_prefixes=("31", "32", "33"),
-    diagnostics_path=Path("./data/processed/mfg_spatial_diagnostics.gpkg"),
+SEMANTIC_SECTOR_CLUSTER_DEFINITIONS: tuple[
+    tuple[str, str, tuple[str, ...]],
+    ...,
+] = (
+    ("manufacturing", "mfg", ("31", "32", "33")),
+    ("construction", "construction", ("23",)),
+    ("logistics", "logistics", ("48", "49")),
+    ("commerce", "commerce", ("43", "46")),
+    ("business_services", "business_services", ("51", "52", "53", "54", "55", "56")),
+    ("care_education_health", "care_education_health", ("61", "62")),
+    ("local_services", "local_services", ("71", "72", "81")),
+    ("public_admin", "public_admin", ("92",)),
 )
 
-LOGISTICS_CLUSTER_CONFIG = SectorClusterConfig(
-    sector_name="logistics",
-    output_prefix="logistics",
-    scian_prefixes=("48", "49"),
-    diagnostics_path=Path("./data/processed/logistics_spatial_diagnostics.gpkg"),
-)
+
+def build_semantic_sector_cluster_configs(
+    diagnostics_dir: Path | str = Path("./data/processed"),
+) -> tuple[SectorClusterConfig, ...]:
+    diagnostics_path = Path(diagnostics_dir)
+    return tuple(
+        SectorClusterConfig(
+            sector_name=sector_name,
+            output_prefix=output_prefix,
+            scian_prefixes=scian_prefixes,
+            diagnostics_path=diagnostics_path
+            / f"{output_prefix}_spatial_diagnostics.gpkg",
+        )
+        for sector_name, output_prefix, scian_prefixes in (
+            SEMANTIC_SECTOR_CLUSTER_DEFINITIONS
+        )
+    )
+
+
+SEMANTIC_SECTOR_CLUSTER_CONFIGS = build_semantic_sector_cluster_configs()
+_SEMANTIC_CLUSTER_CONFIG_BY_PREFIX = {
+    config.output_prefix: config for config in SEMANTIC_SECTOR_CLUSTER_CONFIGS
+}
+
+MANUFACTURING_CLUSTER_CONFIG = _SEMANTIC_CLUSTER_CONFIG_BY_PREFIX["mfg"]
+LOGISTICS_CLUSTER_CONFIG = _SEMANTIC_CLUSTER_CONFIG_BY_PREFIX["logistics"]
 
 
 def build_sector_cluster_analysis(
@@ -172,11 +199,16 @@ def load_sector_points(
             conn,
             geom_col="geometry",
             params=params,
+            crs="EPSG:6372",
         )
 
-    points = points.assign(
-        num_jobs=lambda frame: frame["per_ocu"].map(PER_OCU_TO_NUM_WORKERS_MAP),
-    ).drop(columns=["per_ocu"])
+    points = (
+        points.assign(
+            num_jobs=lambda frame: frame["per_ocu"].map(PER_OCU_TO_NUM_WORKERS_MAP),
+        )
+        .drop(columns=["per_ocu"])
+        .to_crs(config.crs)
+    )
     point_summary = pd.DataFrame(
         [
             {

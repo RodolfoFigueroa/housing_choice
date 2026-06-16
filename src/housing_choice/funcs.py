@@ -12,9 +12,17 @@ from lyra.api import LyraAPIClient
 def load_parks(data_path: Path) -> gpd.GeoDataFrame:
     return (
         gpd.read_file(data_path / "initial" / "esp_pub", columns=["TIPO", "Sup_M2"])
-        .query(
-            "TIPO.isin(['JARDIN VECINAL', 'PARQUE DE BARRIO', 'JARDINES', 'JARDINES (VIVERO MPAL)', 'PARQUE URBANO'])",
-        )
+        .loc[
+            lambda df: df["TIPO"].isin(
+                [
+                    "JARDIN VECINAL",
+                    "PARQUE DE BARRIO",
+                    "JARDINES",
+                    "JARDINES (VIVERO MPAL)",
+                    "PARQUE URBANO",
+                ]
+            )
+        ]
         .assign(
             geometry=lambda df: df["geometry"].force_2d().centroid,
             amenity="Parques recreativos",
