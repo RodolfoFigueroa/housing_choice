@@ -70,11 +70,15 @@ def _(Path):
     MODELING_YEAR_MIN = 2020
     MODELING_YEAR_MAX = 2025
     BIOGEME_MODEL_PREFIX = "m10"
-    FINALIST_COUNT = 4
+
+    # Number of non-baseline screened specifications to pass to Biogeme.
+    # This keeps final estimation bounded while making finalist selection less brittle.
+    FINALIST_COUNT = 8
 
     TARGET_SCALE_LOWER = 1.0
     TARGET_SCALE_UPPER = 10.0
     MISSING_VALUE_SENTINEL = 99999
+
     return (
         BIOGEME_MODEL_PREFIX,
         FINALIST_COUNT,
@@ -1091,6 +1095,18 @@ def _(
     )
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md("""
+    ### Sample Scope Caveat
+
+    The transaction table is interpreted as a social-housing purchase sample, not a representative sample of all home purchases in the city. That scope is appropriate for this model, but it changes the interpretation of the coefficients: the model describes neighborhoods where social-housing purchases are observed, not unconstrained citywide household preferences.
+
+    Social-housing supply is also spatially structured. If new developments are concentrated in the east or southeast because land is cheaper there, coefficients can partly reflect where projects were built, phased, and sold. The final results should therefore be read as associations with observed social-housing purchases, with supply-side constraints in mind.
+    """)
+    return
+
+
 @app.cell
 def _(df_transactions_model):
 
@@ -1354,11 +1370,11 @@ def _(model_spec_summary, screening_coefficients):
 
 
 @app.cell(hide_code=True)
-def _(mo):
-    mo.md("""
-    ## Final Biogeme Estimation
+def _(FINALIST_COUNT, mo):
+    mo.md(f"""
+    ## Biogeme Finalist Selection
 
-    Biogeme is run only for finalists. Each run receives fresh Parameters with YAML, HTML, validation-result output, and saved iterations disabled; recycle is also disabled.
+    The fast screen ranks candidate one-covariate specifications by AIC. The notebook passes the top `{FINALIST_COUNT}` non-baseline screened candidates, plus the baseline, into Biogeme so the final comparison uses the full estimator while keeping runtime bounded.
     """)
     return
 
@@ -1366,29 +1382,85 @@ def _(mo):
 @app.cell
 def _(FINALIST_COUNT, model_spec_summary, model_specs, screening_comparison):
 
-    finalist_spec_ids = (
-        screening_comparison.loc[
-            lambda df: df["spec_id"].ne("baseline_no_jobs"), "spec_id"
-        ]
-        .head(FINALIST_COUNT)
-        .tolist()
+    _screened_candidates = (
+        screening_comparison.loc[lambda df: df["spec_id"].ne("baseline_no_jobs")]
+        .copy()
+        .reset_index(drop=True)
     )
-    if "baseline_no_jobs" not in finalist_spec_ids:
-        finalist_spec_ids = ["baseline_no_jobs", *finalist_spec_ids]
+    _screened_candidates["screen_rank"] = range(1, len(_screened_candidates) + 1)
+    _selected_screened_candidates = _screened_candidates.head(FINALIST_COUNT)
 
+    finalist_spec_ids = [
+        "baseline_no_jobs",
+        *_selected_screened_candidates["spec_id"].tolist(),
+    ]
     finalist_specs = {spec_id: model_specs[spec_id] for spec_id in finalist_spec_ids}
-    finalist_table = model_spec_summary.loc[
-        lambda df: df["spec_id"].isin(finalist_spec_ids)
-    ].assign(
-        finalist_order=lambda df: df["spec_id"].map(
-            {v: i for i, v in enumerate(finalist_spec_ids)}
+
+    _screening_columns = (
+        screening_comparison.loc[
+            :,
+            [
+                "spec_id",
+                "aic",
+                "delta_aic_vs_best",
+                "delta_aic_vs_baseline",
+                "screen_converged",
+            ],
+        ]
+        .rename(
+            columns={
+                "aic": "screen_aic",
+                "delta_aic_vs_best": "screen_delta_aic_vs_best",
+                "delta_aic_vs_baseline": "screen_delta_aic_vs_baseline",
+            }
+        )
+        .merge(
+            _screened_candidates.loc[:, ["spec_id", "screen_rank"]],
+            on="spec_id",
+            how="left",
         )
     )
-    finalist_table = finalist_table.sort_values("finalist_order").drop(
-        columns="finalist_order"
+    _finalist_order_by_spec = {
+        _spec_id: _rank for _rank, _spec_id in enumerate(finalist_spec_ids)
+    }
+
+    finalist_table = (
+        model_spec_summary.loc[lambda df: df["spec_id"].isin(finalist_spec_ids)]
+        .merge(_screening_columns, on="spec_id", how="left")
+        .assign(finalist_order=lambda df: df["spec_id"].map(_finalist_order_by_spec))
+        .sort_values("finalist_order")
+        .drop(columns="finalist_order")
     )
-    finalist_table
+    finalist_table["screen_rank"] = finalist_table["screen_rank"].fillna(0).astype(int)
+    finalist_table["finalist_role"] = finalist_table["screen_rank"].map(
+        lambda rank: "baseline" if rank == 0 else f"screen_rank_{rank}"
+    )
+
+    finalist_selection_table = finalist_table.loc[
+        :,
+        [
+            "finalist_role",
+            "spec_id",
+            "family",
+            "candidate_feature",
+            "screen_aic",
+            "screen_delta_aic_vs_baseline",
+            "screen_converged",
+        ],
+    ]
+    finalist_selection_table
+
     return (finalist_specs,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md("""
+    ## Final Biogeme Estimation
+
+    Each finalist receives a fresh Biogeme run with output files, saved iterations, recycle, and bootstrap disabled. The comparison below decides among the baseline and selected finalists using the full Biogeme estimates.
+    """)
+    return
 
 
 @app.cell
@@ -1570,7 +1642,7 @@ def _(
         selected_max_abs_correlation,
     ) = compute_feature_diagnostics(selected_diagnostics_frame)
     selected_feature_vif
-    return (selected_feature_correlation,)
+    return selected_diagnostics_frame, selected_feature_correlation
 
 
 @app.cell
@@ -1635,6 +1707,131 @@ def _(selected_choice_share_summary):
     choice_share_plot_axis.set_ylabel("")
     choice_share_plot_axis.set_title("Observed vs predicted shares")
     choice_share_plot_axis
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md("""
+    ## Interpreting The Logistics Coefficient
+
+    The selected model assigns a large negative coefficient to `jobs_logistics_20_2025_scaled`. This does not necessarily mean that social-housing buyers dislike access to logistics jobs in a direct preference sense.
+
+    In this sample, transactions mostly come from social-housing developments, and those developments are not spread uniformly across the city. The logistics coefficient can therefore capture several things at once: industrial land exposure, truck-corridor proximity, the geography of cheaper developable land, omitted developer or project characteristics, and the fact that some high-logistics areas may simply have fewer social-housing units available to purchase.
+
+    The diagnostics below check whether the sign is already visible in the raw modeled choice set by comparing neighborhood transaction shares with logistics accessibility.
+    """)
+    return
+
+
+@app.cell
+def _(selected_choice_share_summary, selected_diagnostics_frame):
+
+    _logistics_feature = "jobs_logistics_20_2025_scaled"
+    _share_frame = selected_choice_share_summary.set_index("neighborhood_idx").loc[
+        :,
+        ["neighborhood", "observed_share", "predicted_share", "share_error"],
+    ]
+
+    logistics_sample_diagnostic_frame = selected_diagnostics_frame.join(
+        _share_frame
+    ).reset_index(names="neighborhood_idx")
+
+    _logistics_correlation_features = [
+        _logistics_feature,
+        "accessibility_services_scaled",
+        "travel_time_city_center_scaled",
+        "travel_time_nearest_crossing_scaled",
+        "access_is_restricted",
+        "log_built_area_ha",
+    ]
+    logistics_correlation_summary = (
+        logistics_sample_diagnostic_frame.loc[
+            :,
+            [*_logistics_correlation_features, "observed_share"],
+        ]
+        .corr(numeric_only=True)["observed_share"]
+        .drop("observed_share")
+        .rename("correlation_with_observed_share")
+        .reset_index(name="correlation_with_observed_share")
+        .rename(columns={"index": "feature"})
+        .sort_values("correlation_with_observed_share")
+        .round(3)
+    )
+
+    logistics_correlation_summary
+
+    return (logistics_sample_diagnostic_frame,)
+
+
+@app.cell
+def _(logistics_sample_diagnostic_frame):
+
+    _logistics_feature = "jobs_logistics_20_2025_scaled"
+    logistics_high_accessibility_table = (
+        logistics_sample_diagnostic_frame.sort_values(
+            _logistics_feature, ascending=False
+        )
+        .assign(
+            observed_share=lambda df: df["observed_share"].round(4),
+            predicted_share=lambda df: df["predicted_share"].round(4),
+            jobs_logistics_20_2025_scaled=lambda df: df[_logistics_feature].round(3),
+            travel_time_city_center_scaled=lambda df: df[
+                "travel_time_city_center_scaled"
+            ].round(3),
+            travel_time_nearest_crossing_scaled=lambda df: df[
+                "travel_time_nearest_crossing_scaled"
+            ].round(3),
+            accessibility_services_scaled=lambda df: df[
+                "accessibility_services_scaled"
+            ].round(3),
+            log_built_area_ha=lambda df: df["log_built_area_ha"].round(3),
+        )
+        .loc[
+            :,
+            [
+                "neighborhood",
+                _logistics_feature,
+                "observed_share",
+                "predicted_share",
+                "travel_time_city_center_scaled",
+                "travel_time_nearest_crossing_scaled",
+                "accessibility_services_scaled",
+                "log_built_area_ha",
+            ],
+        ]
+        .head(15)
+    )
+    logistics_high_accessibility_table
+
+    return
+
+
+@app.cell
+def _(logistics_sample_diagnostic_frame, plt, sns):
+
+    _logistics_feature = "jobs_logistics_20_2025_scaled"
+    logistics_share_plot_figure, logistics_share_plot_axis = plt.subplots(
+        figsize=(7, 5)
+    )
+    sns.regplot(
+        data=logistics_sample_diagnostic_frame,
+        x=_logistics_feature,
+        y="observed_share",
+        ax=logistics_share_plot_axis,
+        scatter_kws={"s": 55, "alpha": 0.8},
+        line_kws={"color": "black", "linewidth": 1.2},
+    )
+    logistics_share_plot_axis.set_xlabel(
+        "Logistics job accessibility, 20-minute catchment (scaled)"
+    )
+    logistics_share_plot_axis.set_ylabel("Observed transaction share")
+    logistics_share_plot_axis.set_title(
+        "Observed social-housing transaction share vs logistics accessibility"
+    )
+    logistics_share_plot_figure.tight_layout()
+    logistics_share_plot_figure
+
     return
 
 
