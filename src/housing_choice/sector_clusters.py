@@ -494,20 +494,61 @@ def compute_neighborhood_cluster_features(
     neighborhood_feature_frame = neighborhood_features.set_index("name_detail")[
         cluster_feature_cols
     ]
-    neighborhood_feature_summary = neighborhood_features[
-        [
-            "name_detail",
-            f"nearest_{config.output_prefix}_cluster_rank",
-            f"nearest_{config.output_prefix}_cluster_jobs",
-            f"{config.output_prefix}_distance_nearest_cluster_km",
-            f"{config.output_prefix}_jobs_within_2km",
-            f"log_{config.output_prefix}_jobs_within_2km",
-            f"{config.output_prefix}_cluster_gravity_inv_sq",
-            f"log_{config.output_prefix}_cluster_gravity_inv_sq",
-            f"intersects_{config.output_prefix}_cluster",
-            f"within_1km_of_{config.output_prefix}_cluster",
+    neighborhood_feature_summary = (
+        neighborhood_features[
+            [
+                "name_detail",
+                f"nearest_{config.output_prefix}_cluster_rank",
+                f"nearest_{config.output_prefix}_cluster_jobs",
+                f"{config.output_prefix}_distance_nearest_cluster_km",
+                f"{config.output_prefix}_jobs_within_2km",
+                f"log_{config.output_prefix}_jobs_within_2km",
+                f"{config.output_prefix}_cluster_gravity_inv_sq",
+                f"log_{config.output_prefix}_cluster_gravity_inv_sq",
+                f"intersects_{config.output_prefix}_cluster",
+                f"within_1km_of_{config.output_prefix}_cluster",
+            ]
         ]
-    ].sort_values(f"{config.output_prefix}_distance_nearest_cluster_km")
+        .rename(
+            columns={
+                f"nearest_{config.output_prefix}_cluster_rank": "nearest_cluster_rank",
+                f"nearest_{config.output_prefix}_cluster_jobs": "nearest_cluster_jobs",
+                (
+                    f"{config.output_prefix}_distance_nearest_cluster_km"
+                ): "distance_nearest_cluster_km",
+                f"{config.output_prefix}_jobs_within_2km": "jobs_within_2km",
+                f"log_{config.output_prefix}_jobs_within_2km": "log_jobs_within_2km",
+                (
+                    f"{config.output_prefix}_cluster_gravity_inv_sq"
+                ): "cluster_gravity_inv_sq",
+                (
+                    f"log_{config.output_prefix}_cluster_gravity_inv_sq"
+                ): "log_cluster_gravity_inv_sq",
+                f"intersects_{config.output_prefix}_cluster": "intersects_cluster",
+                (
+                    f"within_1km_of_{config.output_prefix}_cluster"
+                ): "within_1km_of_cluster",
+            },
+        )
+        .assign(sector=config.sector_name)
+        .loc[
+            :,
+            [
+                "sector",
+                "name_detail",
+                "nearest_cluster_rank",
+                "nearest_cluster_jobs",
+                "distance_nearest_cluster_km",
+                "jobs_within_2km",
+                "log_jobs_within_2km",
+                "cluster_gravity_inv_sq",
+                "log_cluster_gravity_inv_sq",
+                "intersects_cluster",
+                "within_1km_of_cluster",
+            ],
+        ]
+        .sort_values(["sector", "distance_nearest_cluster_km"])
+    )
     return (
         neighborhood_features,
         neighborhood_feature_frame,

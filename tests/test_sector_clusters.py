@@ -104,6 +104,44 @@ class SectorClusterTest(TestCase):
         assert row["logistics_jobs_within_2km"] == 500.0
         assert row["logistics_jobs_within_2km"] >= row["logistics_jobs_within_1km"]
 
+    def test_neighborhood_summary_uses_sector_tidy_columns(self) -> None:
+        neighborhoods = gpd.GeoDataFrame(
+            {
+                "name": ["a"],
+                "name_detail": ["a"],
+                "geometry": [shapely.box(0, 0, 100, 100)],
+            },
+            geometry="geometry",
+            crs="EPSG:6372",
+        )
+        clusters = gpd.GeoDataFrame(
+            {
+                "cluster_id": [1],
+                "cluster_rank": [1],
+                "num_jobs": [100.0],
+                "num_businesses": [2],
+                "jobs_per_km2": [100.0],
+                "area_km2": [1.0],
+                "geometry": [shapely.box(200, 0, 300, 100)],
+            },
+            geometry="geometry",
+            crs="EPSG:6372",
+        )
+
+        _features, _feature_frame, _feature_cols, summary = (
+            compute_neighborhood_cluster_features(
+                neighborhoods,
+                clusters,
+                LOGISTICS_CLUSTER_CONFIG,
+            )
+        )
+
+        assert "sector" in summary.columns
+        assert "nearest_cluster_jobs" in summary.columns
+        assert "nearest_logistics_cluster_jobs" not in summary.columns
+        assert summary.loc[0, "sector"] == "logistics"
+        assert summary.loc[0, "nearest_cluster_jobs"] == 100.0
+
     def test_connected_components_split_disconnected_hotspots(self) -> None:
         components = assign_connected_components(
             selected_ids={0, 1, 4},

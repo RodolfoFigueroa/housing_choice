@@ -61,7 +61,8 @@ def md_setup():
 @app.cell
 def _():
     data_path = Path(os.environ["DATA_PATH"])
-    return (data_path,)
+    generated_path = data_path / "generated"
+    return data_path, generated_path
 
 
 @app.cell
@@ -397,12 +398,69 @@ def sector_cluster_neighborhood_features(sector_cluster_results):
         result.config.output_prefix: result.neighborhood_features
         for result in sector_cluster_results
     }
-    sector_cluster_feature_summary = pd.concat(
-        [result.neighborhood_feature_summary for result in sector_cluster_results],
+    sector_cluster_summary = pd.concat(
+        [result.cluster_summary for result in sector_cluster_results],
         ignore_index=True,
     )
 
-    sector_cluster_feature_summary.head(40)
+    def _tidy_neighborhood_feature_summary(result):
+        prefix = result.config.output_prefix
+        return (
+            result.neighborhood_features[
+                [
+                    "name_detail",
+                    f"nearest_{prefix}_cluster_rank",
+                    f"nearest_{prefix}_cluster_jobs",
+                    f"{prefix}_distance_nearest_cluster_km",
+                    f"{prefix}_jobs_within_2km",
+                    f"log_{prefix}_jobs_within_2km",
+                    f"{prefix}_cluster_gravity_inv_sq",
+                    f"log_{prefix}_cluster_gravity_inv_sq",
+                    f"intersects_{prefix}_cluster",
+                    f"within_1km_of_{prefix}_cluster",
+                ]
+            ]
+            .rename(
+                columns={
+                    f"nearest_{prefix}_cluster_rank": "nearest_cluster_rank",
+                    f"nearest_{prefix}_cluster_jobs": "nearest_cluster_jobs",
+                    f"{prefix}_distance_nearest_cluster_km": "distance_nearest_cluster_km",
+                    f"{prefix}_jobs_within_2km": "jobs_within_2km",
+                    f"log_{prefix}_jobs_within_2km": "log_jobs_within_2km",
+                    f"{prefix}_cluster_gravity_inv_sq": "cluster_gravity_inv_sq",
+                    f"log_{prefix}_cluster_gravity_inv_sq": "log_cluster_gravity_inv_sq",
+                    f"intersects_{prefix}_cluster": "intersects_cluster",
+                    f"within_1km_of_{prefix}_cluster": "within_1km_of_cluster",
+                }
+            )
+            .assign(sector=result.config.sector_name)
+            .loc[
+                :,
+                [
+                    "sector",
+                    "name_detail",
+                    "nearest_cluster_rank",
+                    "nearest_cluster_jobs",
+                    "distance_nearest_cluster_km",
+                    "jobs_within_2km",
+                    "log_jobs_within_2km",
+                    "cluster_gravity_inv_sq",
+                    "log_cluster_gravity_inv_sq",
+                    "intersects_cluster",
+                    "within_1km_of_cluster",
+                ],
+            ]
+        )
+
+    sector_cluster_feature_summary = pd.concat(
+        [
+            _tidy_neighborhood_feature_summary(result)
+            for result in sector_cluster_results
+        ],
+        ignore_index=True,
+    ).sort_values(["sector", "distance_nearest_cluster_km"])
+
+    sector_cluster_summary
     return (
         sector_cluster_feature_cols,
         sector_cluster_neighborhood_feature_frame,
@@ -636,6 +694,7 @@ def _(
     df_areas,
     df_col,
     df_travel_times,
+    generated_path,
     sector_cluster_neighborhood_feature_frame,
 ):
     df_final = (
@@ -650,7 +709,7 @@ def _(
         )
     )
 
-    df_final.to_file("./data/processed/col_final.gpkg")
+    df_final.to_file(generated_path / "col_final.gpkg")
     return (df_final,)
 
 
@@ -668,13 +727,14 @@ def md_validation():
 def sector_cluster_feature_validation(
     df_col,
     df_final,
+    generated_path,
     sector_cluster_diagnostics_paths,
     sector_cluster_feature_cols,
     sector_cluster_neighborhood_features,
     sector_cluster_results,
 ):
     legacy_mfg_cluster_feature_output_path = Path(
-        "./data/processed/mfg_cluster_neighborhood_features.gpkg"
+        generated_path / "mfg_cluster_neighborhood_features.gpkg"
     )
     if legacy_mfg_cluster_feature_output_path.exists():
         legacy_mfg_cluster_feature_output_path.unlink()
@@ -700,8 +760,8 @@ def sector_cluster_feature_validation(
         },
         {
             "check": "col_final_written",
-            "passed": Path("./data/processed/col_final.gpkg").exists(),
-            "value": "./data/processed/col_final.gpkg",
+            "passed": (generated_path / "col_final.gpkg").exists(),
+            "value": str(generated_path / "col_final.gpkg"),
         },
     ]
 
@@ -772,12 +832,12 @@ def md_transactions_export():
 
 
 @app.cell
-def _(df_col, df_transactions: pd.DataFrame):
+def _(df_col, df_transactions: pd.DataFrame, generated_path):
     df_transactions_final = df_transactions.loc[
         lambda df: df["address"].isin(df_col["name_detail"])
     ]
 
-    df_transactions_final.to_parquet("./data/processed/transactions_final.parquet")
+    df_transactions_final.to_parquet(generated_path / "transactions_final.parquet")
     return
 
 
