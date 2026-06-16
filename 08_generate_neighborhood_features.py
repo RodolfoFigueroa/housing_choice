@@ -12,6 +12,7 @@ with app.setup:
     import ee
     import geemap
     import geopandas as gpd
+    import marimo as mo
     import numpy as np
     import osmnx as ox
     import pandas as pd
@@ -308,7 +309,7 @@ def mfg_denue_points(df_col, engine):
         "251 y m?s personas": 500,
     }
 
-    with engine.connect() as conn:
+    with engine.connect() as _conn:
         mfg_points = gpd.read_postgis(
             """
             SELECT codigo_act, per_ocu, geometry
@@ -317,7 +318,7 @@ def mfg_denue_points(df_col, engine):
                 codigo_act LIKE ANY (ARRAY['31%%', '32%%', '33%%'])
                 AND (geometry && ST_MakeEnvelope(%(xmin)s, %(ymin)s, %(xmax)s, %(ymax)s, 6372))
             """,
-            conn,
+            _conn,
             geom_col="geometry",
             params={
                 "xmin": int(mfg_xmin),
@@ -892,9 +893,10 @@ def mfg_diagnostics_export(mfg_clusters, mfg_hotspot_cells, mfg_hotspot_grid):
 
 @app.cell
 def _(client, df_col):
-    df_accessibility_jobs = calculate_accessibility_jobs(df_col, client).drop(
-        columns=["year_2025"]
-    )
+    with mo.persistent_cache("accessibility_jobs"):
+        df_accessibility_jobs = calculate_accessibility_jobs(df_col, client).drop(
+            columns=["year_2025"]
+        )
     return (df_accessibility_jobs,)
 
 
@@ -917,13 +919,13 @@ def _(client, data_path, df_col):
 
 @app.cell
 def _(engine):
-    with engine.connect() as conn:
+    with engine.connect() as _conn:
         city_center = gpd.read_postgis(
             """
             SELECT geometry FROM centroids_historical
             WHERE cve_met = '02.2.03'
             """,
-            conn,
+            _conn,
             geom_col="geometry",
         ).to_crs("EPSG:6372")
     return (city_center,)
@@ -1157,6 +1159,7 @@ def mfg_feature_validation(
     )
 
     mfg_feature_export_validation
+    return
 
 
 @app.cell
@@ -1166,6 +1169,7 @@ def _(df_col, df_transactions: pd.DataFrame):
     ]
 
     df_transactions_final.to_parquet("./data/processed/transactions_final.parquet")
+    return
 
 
 if __name__ == "__main__":
