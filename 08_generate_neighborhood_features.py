@@ -16,11 +16,7 @@ with app.setup:
     import numpy as np
     import osmnx as ox
     import pandas as pd
-    import shapely
     import sqlalchemy
-    from esda.getisord import G_Local
-    from esda.moran import Moran, Moran_Local
-    from libpysal.weights import W
     from lyra.api import LyraAPIClient
     from pyproj import CRS
 
@@ -28,6 +24,13 @@ with app.setup:
         calculate_accessibility_jobs,
         calculate_accessibility_services,
         load_parks,
+    )
+    from housing_choice.sector_clusters import (
+        LOGISTICS_CLUSTER_CONFIG,
+        MANUFACTURING_CLUSTER_CONFIG,
+        band_suffix,
+        build_sector_cluster_analysis,
+        export_sector_cluster_diagnostics,
     )
 
     ee.Initialize()
@@ -338,649 +341,89 @@ def _(data_path, df_transactions: pd.DataFrame):
 
 
 @app.cell(hide_code=True)
-def md_mfg_features():
+def md_sector_cluster_features():
     mo.md("""
-    ## Manufacturing cluster features
+    ## Economic-sector cluster features
 
-    This section derives neighborhood exposure to manufacturing employment clusters from DENUE establishments. These features now belong directly in `col_final.gpkg`, so downstream notebooks can treat that geopackage as the only neighborhood-feature source.
+    This section derives neighborhood exposure to employment clusters from DENUE establishments. The shared sector-cluster pipeline is run for manufacturing and logistics, and the resulting neighborhood-level features are written directly into `col_final.gpkg`.
     """)
     return
 
 
 @app.cell
-def mfg_denue_points(df_col, engine):
-    mfg_xmin, mfg_ymin, mfg_xmax, mfg_ymax = df_col.buffer(10_000).total_bounds
+def sector_cluster_analysis(df_col, engine):
+    mfg_cluster_analysis = build_sector_cluster_analysis(
+        df_col,
+        engine,
+        MANUFACTURING_CLUSTER_CONFIG,
+    )
+    logistics_cluster_analysis = build_sector_cluster_analysis(
+        df_col,
+        engine,
+        LOGISTICS_CLUSTER_CONFIG,
+    )
+    sector_cluster_results = [mfg_cluster_analysis, logistics_cluster_analysis]
 
-    MFG_PER_OCU_TO_NUM_WORKERS_MAP = {
-        "0 a 5 personas": 3,
-        "6 a 10 personas": 8,
-        "11 a 30 personas": 20,
-        "31 a 50 personas": 40,
-        "51 a 100 personas": 75,
-        "101 a 250 personas": 175,
-        "251 y m?s personas": 500,
+    sector_cluster_point_summary = pd.concat(
+        [result.point_summary for result in sector_cluster_results],
+        ignore_index=True,
+    )
+    sector_cluster_point_summary
+    return (sector_cluster_results,)
+
+
+@app.cell(hide_code=True)
+def md_sector_cluster_outputs():
+    mo.md("""
+    ### Cluster features and diagnostics
+
+    For each sector, hotspot cells are dissolved into ranked clusters and translated into neighborhood exposure measures: proximity, overlap, jobs within distance bands, and gravity-style exposure. Diagnostic layers are exported separately for map review and sanity checks.
+    """)
+    return
+
+
+@app.cell
+def sector_cluster_neighborhood_features(sector_cluster_results):
+    sector_cluster_neighborhood_feature_frame = pd.concat(
+        [result.neighborhood_feature_frame for result in sector_cluster_results],
+        axis=1,
+    )
+    sector_cluster_feature_cols = [
+        column
+        for result in sector_cluster_results
+        for column in result.cluster_feature_cols
+    ]
+    sector_cluster_neighborhood_features = {
+        result.config.output_prefix: result.neighborhood_features
+        for result in sector_cluster_results
+    }
+    sector_cluster_feature_summary = pd.concat(
+        [result.neighborhood_feature_summary for result in sector_cluster_results],
+        ignore_index=True,
+    )
+
+    sector_cluster_feature_summary.head(40)
+    return (
+        sector_cluster_feature_cols,
+        sector_cluster_neighborhood_feature_frame,
+        sector_cluster_neighborhood_features,
+    )
+
+
+@app.cell
+def sector_cluster_diagnostics_export(sector_cluster_results):
+    sector_cluster_diagnostics_paths = {
+        result.config.output_prefix: export_sector_cluster_diagnostics(result)
+        for result in sector_cluster_results
     }
 
-    with engine.connect() as _conn:
-        mfg_points = gpd.read_postgis(
-            """
-            SELECT codigo_act, per_ocu, geometry
-            FROM denue_2025_05
-            WHERE
-                codigo_act LIKE ANY (ARRAY['31%%', '32%%', '33%%'])
-                AND (geometry && ST_MakeEnvelope(%(xmin)s, %(ymin)s, %(xmax)s, %(ymax)s, 6372))
-            """,
-            _conn,
-            geom_col="geometry",
-            params={
-                "xmin": int(mfg_xmin),
-                "ymin": int(mfg_ymin),
-                "xmax": int(mfg_xmax),
-                "ymax": int(mfg_ymax),
-            },
-        )
-
-    mfg_points = mfg_points.assign(
-        num_jobs=lambda df: df["per_ocu"].map(MFG_PER_OCU_TO_NUM_WORKERS_MAP)
-    ).drop(columns=["per_ocu"])
-
-    mfg_points_summary = pd.DataFrame(
+    pd.DataFrame(
         [
-            {
-                "businesses": len(mfg_points),
-                "jobs": float(mfg_points["num_jobs"].sum()),
-                "min_x": mfg_xmin,
-                "min_y": mfg_ymin,
-                "max_x": mfg_xmax,
-                "max_y": mfg_ymax,
-            }
+            {"sector": prefix, "diagnostics_path": str(path)}
+            for prefix, path in sector_cluster_diagnostics_paths.items()
         ]
     )
-
-    mfg_points_summary
-    return mfg_points, mfg_xmax, mfg_xmin, mfg_ymax, mfg_ymin
-
-
-@app.cell(hide_code=True)
-def md_mfg_denue():
-    mo.md("""
-    ### DENUE establishments and 250m grid
-
-    Manufacturing establishments are selected with SCIAN activity codes beginning with `31`, `32`, or `33`. The query uses a buffered neighborhood bounding box, maps DENUE employment-size categories to representative worker counts, and aggregates jobs and business counts onto a 250 meter grid.
-    """)
-    return
-
-
-@app.cell
-def mfg_grid_aggregation(mfg_points, mfg_xmax, mfg_xmin, mfg_ymax, mfg_ymin):
-    mfg_grid_size = 250
-    mfg_grid_n_cols = int((mfg_xmax - mfg_xmin) / mfg_grid_size) + 1
-    mfg_grid_n_rows = int((mfg_ymax - mfg_ymin) / mfg_grid_size) + 1
-
-    _mfg_boxes = [
-        shapely.box(
-            mfg_xmin + _col * mfg_grid_size,
-            mfg_ymin + _row * mfg_grid_size,
-            mfg_xmin + (_col + 1) * mfg_grid_size,
-            mfg_ymin + (_row + 1) * mfg_grid_size,
-        )
-        for _col in range(mfg_grid_n_cols)
-        for _row in range(mfg_grid_n_rows)
-    ]
-
-    _mfg_grid_cells = gpd.GeoDataFrame(
-        geometry=_mfg_boxes, crs="EPSG:6372"
-    ).reset_index(names="grid_idx")
-    _mfg_grid_cells["grid_col"] = _mfg_grid_cells["grid_idx"] // mfg_grid_n_rows
-    _mfg_grid_cells["grid_row"] = _mfg_grid_cells["grid_idx"] % mfg_grid_n_rows
-
-    _mfg_joined_points = _mfg_grid_cells.sjoin(
-        mfg_points[["num_jobs", "geometry"]],
-        how="left",
-        predicate="contains",
-    )
-    _mfg_cell_stats = _mfg_joined_points.groupby("grid_idx", as_index=False).agg(
-        num_jobs=("num_jobs", "sum"), num_businesses=("num_jobs", "count")
-    )
-
-    mfg_grid = _mfg_grid_cells.merge(_mfg_cell_stats, on="grid_idx", how="left")
-    mfg_grid["num_jobs"] = mfg_grid["num_jobs"].fillna(0.0)
-    mfg_grid["num_businesses"] = mfg_grid["num_businesses"].fillna(0).astype(int)
-    mfg_grid["cell_area_km2"] = mfg_grid.geometry.area / 1_000_000
-    mfg_grid["jobs_per_km2"] = mfg_grid["num_jobs"] / mfg_grid["cell_area_km2"]
-    mfg_grid["log_jobs"] = np.log1p(mfg_grid["num_jobs"])
-
-    mfg_grid_summary = pd.DataFrame(
-        [
-            {
-                "grid_cells": len(mfg_grid),
-                "cells_with_businesses": int(mfg_grid["num_businesses"].gt(0).sum()),
-                "businesses": int(mfg_grid["num_businesses"].sum()),
-                "jobs": float(mfg_grid["num_jobs"].sum()),
-            }
-        ]
-    )
-
-    mfg_grid_summary
-    return mfg_grid, mfg_grid_n_cols, mfg_grid_n_rows
-
-
-@app.cell
-def mfg_spatial_weights(mfg_grid, mfg_grid_n_cols, mfg_grid_n_rows):
-    mfg_spatial_permutations = 199
-    mfg_spatial_random_seed = 42
-    mfg_hotspot_min_jobs = 500
-    mfg_hotspot_min_businesses = 2
-
-    _mfg_neighbor_offsets = [
-        (_dc, _dr)
-        for _dc in (-1, 0, 1)
-        for _dr in (-1, 0, 1)
-        if not (_dc == 0 and _dr == 0)
-    ]
-
-    mfg_weight_neighbors = {}
-    for _idx, _col, _row in mfg_grid[["grid_idx", "grid_col", "grid_row"]].itertuples(
-        index=False, name=None
-    ):
-        _neighbor_ids = []
-        for _dc, _dr in _mfg_neighbor_offsets:
-            _neighbor_col = int(_col) + _dc
-            _neighbor_row = int(_row) + _dr
-            if (
-                0 <= _neighbor_col < mfg_grid_n_cols
-                and 0 <= _neighbor_row < mfg_grid_n_rows
-            ):
-                _neighbor_ids.append(
-                    int(_neighbor_col * mfg_grid_n_rows + _neighbor_row)
-                )
-        mfg_weight_neighbors[int(_idx)] = _neighbor_ids
-
-    mfg_weights = W(mfg_weight_neighbors, silence_warnings=True)
-    mfg_weights.transform = "R"
-
-    mfg_weights_binary = W(mfg_weight_neighbors, silence_warnings=True)
-    mfg_weights_binary.transform = "B"
-    return (
-        mfg_hotspot_min_businesses,
-        mfg_hotspot_min_jobs,
-        mfg_spatial_permutations,
-        mfg_spatial_random_seed,
-        mfg_weight_neighbors,
-        mfg_weights,
-        mfg_weights_binary,
-    )
-
-
-@app.cell(hide_code=True)
-def md_mfg_hotspots():
-    mo.md("""
-    ### Spatial hotspot detection
-
-    The grid is analyzed with queen-style neighboring cells, global and local Moran statistics, and Getis-Ord Gi*. Candidate hotspot cells are those with significant Gi* evidence and either direct manufacturing employment or local high-high support.
-    """)
-    return
-
-
-@app.cell
-def mfg_hotspot_stats(
-    mfg_grid,
-    mfg_spatial_permutations,
-    mfg_spatial_random_seed,
-    mfg_weights,
-    mfg_weights_binary,
-):
-    mfg_values = mfg_grid["num_jobs"].to_numpy(dtype=float)
-
-    mfg_moran_jobs = Moran(
-        mfg_values, mfg_weights, permutations=mfg_spatial_permutations
-    )
-    mfg_local_moran_jobs = Moran_Local(
-        mfg_values,
-        mfg_weights,
-        permutations=mfg_spatial_permutations,
-        seed=mfg_spatial_random_seed,
-        n_jobs=1,
-        keep_simulations=False,
-    )
-    mfg_getis_ord_jobs = G_Local(
-        mfg_values,
-        mfg_weights_binary,
-        transform="B",
-        permutations=mfg_spatial_permutations,
-        star=True,
-        seed=mfg_spatial_random_seed,
-        n_jobs=1,
-        keep_simulations=False,
-    )
-
-    mfg_hotspot_grid = mfg_grid.copy()
-    mfg_hotspot_grid["local_moran_i"] = mfg_local_moran_jobs.Is
-    mfg_hotspot_grid["local_moran_q"] = mfg_local_moran_jobs.q
-    mfg_hotspot_grid["local_moran_p"] = mfg_local_moran_jobs.p_sim
-    mfg_hotspot_grid["getis_ord_g"] = mfg_getis_ord_jobs.Gs
-    mfg_hotspot_grid["getis_ord_z"] = mfg_getis_ord_jobs.Zs
-    mfg_hotspot_grid["getis_ord_p"] = mfg_getis_ord_jobs.p_sim
-    mfg_hotspot_grid["is_local_high_high"] = mfg_hotspot_grid["local_moran_q"].eq(
-        1
-    ) & mfg_hotspot_grid["local_moran_p"].lt(0.05)
-    mfg_hotspot_grid["is_gi_hotspot"] = mfg_hotspot_grid["getis_ord_z"].gt(
-        1.96
-    ) & mfg_hotspot_grid["getis_ord_p"].lt(0.05)
-    mfg_hotspot_grid["is_hotspot_candidate"] = mfg_hotspot_grid["is_gi_hotspot"] & (
-        mfg_hotspot_grid["num_jobs"].gt(0) | mfg_hotspot_grid["is_local_high_high"]
-    )
-
-    mfg_spatial_stats_summary = pd.DataFrame(
-        [
-            {
-                "statistic": "Global Moran's I",
-                "value": mfg_moran_jobs.I,
-                "expected_value": mfg_moran_jobs.EI,
-                "p_sim": mfg_moran_jobs.p_sim,
-                "permutations": mfg_spatial_permutations,
-            },
-            {
-                "statistic": "Local Moran high-high cells",
-                "value": int(mfg_hotspot_grid["is_local_high_high"].sum()),
-                "expected_value": np.nan,
-                "p_sim": np.nan,
-                "permutations": mfg_spatial_permutations,
-            },
-            {
-                "statistic": "Getis-Ord Gi* hotspot cells",
-                "value": int(mfg_hotspot_grid["is_gi_hotspot"].sum()),
-                "expected_value": np.nan,
-                "p_sim": np.nan,
-                "permutations": mfg_spatial_permutations,
-            },
-            {
-                "statistic": "Selected hotspot candidate cells",
-                "value": int(mfg_hotspot_grid["is_hotspot_candidate"].sum()),
-                "expected_value": np.nan,
-                "p_sim": np.nan,
-                "permutations": mfg_spatial_permutations,
-            },
-        ]
-    )
-
-    mfg_spatial_stats_summary
-    return (mfg_hotspot_grid,)
-
-
-@app.cell
-def mfg_hotspot_clusters(
-    mfg_grid,
-    mfg_hotspot_grid,
-    mfg_hotspot_min_businesses,
-    mfg_hotspot_min_jobs,
-    mfg_weight_neighbors,
-):
-    def _assign_connected_components(selected_ids, neighbors):
-        component_by_cell = {}
-        component_id = 0
-        for start in sorted(selected_ids):
-            if start in component_by_cell:
-                continue
-            component_id += 1
-            stack = [start]
-            component_by_cell[start] = component_id
-            while stack:
-                cell = stack.pop()
-                for neighbor in neighbors[cell]:
-                    if neighbor in selected_ids and neighbor not in component_by_cell:
-                        component_by_cell[neighbor] = component_id
-                        stack.append(neighbor)
-        return component_by_cell
-
-    _selected_hotspot_ids = set(
-        mfg_hotspot_grid.loc[
-            mfg_hotspot_grid["is_hotspot_candidate"], "grid_idx"
-        ].astype(int)
-    )
-
-    mfg_hotspot_cells = mfg_hotspot_grid.loc[
-        mfg_hotspot_grid["is_hotspot_candidate"]
-    ].copy()
-    if mfg_hotspot_cells.empty:
-        mfg_hotspot_cells["cluster_id"] = pd.Series(dtype="Int64")
-        mfg_clusters_all = gpd.GeoDataFrame(
-            columns=[
-                "cluster_id",
-                "num_cells",
-                "num_jobs",
-                "num_businesses",
-                "max_getis_ord_z",
-                "min_getis_ord_p",
-                "max_local_moran_i",
-                "area_km2",
-                "jobs_per_km2",
-                "centroid_x",
-                "centroid_y",
-                "passes_cluster_threshold",
-                "geometry",
-            ],
-            geometry="geometry",
-            crs=mfg_grid.crs,
-        )
-    else:
-        _component_by_cell = _assign_connected_components(
-            _selected_hotspot_ids, mfg_weight_neighbors
-        )
-        mfg_hotspot_cells["cluster_id"] = (
-            mfg_hotspot_cells["grid_idx"].astype(int).map(_component_by_cell)
-        )
-        mfg_clusters_all = (
-            mfg_hotspot_cells.dissolve(
-                by="cluster_id",
-                aggfunc={
-                    "grid_idx": "count",
-                    "num_jobs": "sum",
-                    "num_businesses": "sum",
-                    "getis_ord_z": "max",
-                    "getis_ord_p": "min",
-                    "local_moran_i": "max",
-                },
-            )
-            .rename(
-                columns={
-                    "grid_idx": "num_cells",
-                    "getis_ord_z": "max_getis_ord_z",
-                    "getis_ord_p": "min_getis_ord_p",
-                    "local_moran_i": "max_local_moran_i",
-                }
-            )
-            .reset_index()
-        )
-        mfg_clusters_all["area_km2"] = mfg_clusters_all.geometry.area / 1_000_000
-        mfg_clusters_all["jobs_per_km2"] = (
-            mfg_clusters_all["num_jobs"] / mfg_clusters_all["area_km2"]
-        )
-        mfg_clusters_all["centroid_x"] = mfg_clusters_all.geometry.centroid.x
-        mfg_clusters_all["centroid_y"] = mfg_clusters_all.geometry.centroid.y
-        mfg_clusters_all["passes_cluster_threshold"] = mfg_clusters_all["num_jobs"].ge(
-            mfg_hotspot_min_jobs
-        ) & mfg_clusters_all["num_businesses"].ge(mfg_hotspot_min_businesses)
-
-    mfg_clusters_all = mfg_clusters_all.sort_values(
-        ["num_jobs", "area_km2"], ascending=[False, False]
-    ).reset_index(drop=True)
-    mfg_clusters_all["cluster_rank_all"] = np.arange(1, len(mfg_clusters_all) + 1)
-
-    mfg_clusters = mfg_clusters_all.loc[
-        mfg_clusters_all["passes_cluster_threshold"]
-    ].copy()
-    mfg_clusters = mfg_clusters.sort_values(
-        ["num_jobs", "area_km2"], ascending=[False, False]
-    ).reset_index(drop=True)
-    mfg_clusters["cluster_rank"] = np.arange(1, len(mfg_clusters) + 1)
-
-    mfg_cluster_summary = mfg_clusters[
-        [
-            "cluster_rank",
-            "cluster_id",
-            "num_cells",
-            "num_jobs",
-            "num_businesses",
-            "area_km2",
-            "jobs_per_km2",
-            "max_getis_ord_z",
-            "min_getis_ord_p",
-            "centroid_x",
-            "centroid_y",
-        ]
-    ].copy()
-
-    mfg_cluster_summary
-    return mfg_clusters, mfg_hotspot_cells
-
-
-@app.cell(hide_code=True)
-def md_mfg_clusters():
-    mo.md("""
-    ### Clusters and neighborhood exposure
-
-    Adjacent hotspot cells are dissolved into ranked manufacturing clusters. Neighborhood features summarize proximity, overlap, jobs within distance bands, and gravity-style exposure to those clusters.
-    """)
-    return
-
-
-@app.cell
-def mfg_neighborhood_features(df_col, mfg_clusters):
-    _mfg_neighborhood_base = (
-        df_col[["name", "name_detail", "geometry"]]
-        .copy()
-        .reset_index(names="neighborhood_idx")
-    )
-
-    mfg_distance_bands_km = [0.5, 1.0, 2.0, 5.0]
-    mfg_cluster_model_candidate_cols = [
-        "mfg_distance_nearest_cluster_km",
-        "log_mfg_jobs_within_2km",
-        "log_mfg_cluster_gravity_inv_sq",
-    ]
-
-    def _band_suffix(distance_km):
-        if float(distance_km).is_integer():
-            return f"{int(distance_km)}km"
-        return f"{int(distance_km * 1000)}m"
-
-    def _empty_cluster_exposure_record(neighborhood_idx, bands_km):
-        record = {
-            "neighborhood_idx": neighborhood_idx,
-            "nearest_mfg_cluster_id": np.nan,
-            "nearest_mfg_cluster_rank": np.nan,
-            "nearest_mfg_cluster_jobs": np.nan,
-            "nearest_mfg_cluster_businesses": np.nan,
-            "nearest_mfg_cluster_jobs_per_km2": np.nan,
-            "nearest_mfg_cluster_area_km2": np.nan,
-            "distance_to_mfg_cluster_boundary_m": np.nan,
-            "distance_to_mfg_cluster_centroid_m": np.nan,
-            "mfg_distance_nearest_cluster_km": np.nan,
-            "mfg_distance_nearest_cluster_centroid_km": np.nan,
-            "intersects_mfg_cluster": False,
-            "within_500m_of_mfg_cluster": False,
-            "within_1km_of_mfg_cluster": False,
-            "within_2km_of_mfg_cluster": False,
-            "mfg_cluster_gravity_inv_sq": 0.0,
-            "mfg_cluster_gravity_exp_2km": 0.0,
-            "log_mfg_cluster_gravity_inv_sq": 0.0,
-            "log_mfg_cluster_gravity_exp_2km": 0.0,
-        }
-        for band_km in bands_km:
-            suffix = _band_suffix(band_km)
-            record[f"mfg_clusters_within_{suffix}"] = 0
-            record[f"mfg_jobs_within_{suffix}"] = 0.0
-            record[f"log_mfg_jobs_within_{suffix}"] = 0.0
-            record[f"mfg_largest_cluster_jobs_within_{suffix}"] = 0.0
-        return record
-
-    def _cluster_exposure_records(neighborhoods, clusters, bands_km):
-        if clusters.empty:
-            return [
-                _empty_cluster_exposure_record(row.neighborhood_idx, bands_km)
-                for row in neighborhoods.itertuples()
-            ]
-
-        cluster_table = clusters[
-            [
-                "cluster_id",
-                "cluster_rank",
-                "num_jobs",
-                "num_businesses",
-                "jobs_per_km2",
-                "area_km2",
-                "geometry",
-            ]
-        ].copy()
-        cluster_centroids = cluster_table.geometry.centroid
-        cluster_jobs = cluster_table["num_jobs"].to_numpy(dtype=float)
-
-        records = []
-        for row in neighborhoods.itertuples():
-            boundary_distances_m = cluster_table.geometry.distance(
-                row.geometry
-            ).to_numpy(dtype=float)
-            point = row.geometry.representative_point()
-            centroid_distances_m = cluster_centroids.distance(point).to_numpy(
-                dtype=float
-            )
-            nearest_position = int(boundary_distances_m.argmin())
-            nearest_cluster = cluster_table.iloc[nearest_position]
-            distance_km = boundary_distances_m / 1000
-
-            record = {
-                "neighborhood_idx": row.neighborhood_idx,
-                "nearest_mfg_cluster_id": nearest_cluster["cluster_id"],
-                "nearest_mfg_cluster_rank": nearest_cluster["cluster_rank"],
-                "nearest_mfg_cluster_jobs": float(nearest_cluster["num_jobs"]),
-                "nearest_mfg_cluster_businesses": int(
-                    nearest_cluster["num_businesses"]
-                ),
-                "nearest_mfg_cluster_jobs_per_km2": float(
-                    nearest_cluster["jobs_per_km2"]
-                ),
-                "nearest_mfg_cluster_area_km2": float(nearest_cluster["area_km2"]),
-                "distance_to_mfg_cluster_boundary_m": float(
-                    boundary_distances_m[nearest_position]
-                ),
-                "distance_to_mfg_cluster_centroid_m": float(
-                    centroid_distances_m[nearest_position]
-                ),
-                "mfg_distance_nearest_cluster_km": float(
-                    boundary_distances_m[nearest_position] / 1000
-                ),
-                "mfg_distance_nearest_cluster_centroid_km": float(
-                    centroid_distances_m[nearest_position] / 1000
-                ),
-                "intersects_mfg_cluster": bool(
-                    boundary_distances_m[nearest_position] <= 0
-                ),
-                "within_500m_of_mfg_cluster": bool(
-                    boundary_distances_m[nearest_position] <= 500
-                ),
-                "within_1km_of_mfg_cluster": bool(
-                    boundary_distances_m[nearest_position] <= 1_000
-                ),
-                "within_2km_of_mfg_cluster": bool(
-                    boundary_distances_m[nearest_position] <= 2_000
-                ),
-                "mfg_cluster_gravity_inv_sq": float(
-                    (cluster_jobs / np.power(distance_km + 0.25, 2)).sum()
-                ),
-                "mfg_cluster_gravity_exp_2km": float(
-                    (cluster_jobs * np.exp(-distance_km / 2)).sum()
-                ),
-            }
-            record["log_mfg_cluster_gravity_inv_sq"] = float(
-                np.log1p(record["mfg_cluster_gravity_inv_sq"])
-            )
-            record["log_mfg_cluster_gravity_exp_2km"] = float(
-                np.log1p(record["mfg_cluster_gravity_exp_2km"])
-            )
-
-            for band_km in bands_km:
-                suffix = _band_suffix(band_km)
-                in_band = distance_km <= band_km
-                band_jobs = cluster_jobs[in_band]
-                record[f"mfg_clusters_within_{suffix}"] = int(in_band.sum())
-                record[f"mfg_jobs_within_{suffix}"] = float(band_jobs.sum())
-                record[f"log_mfg_jobs_within_{suffix}"] = float(
-                    np.log1p(band_jobs.sum())
-                )
-                record[f"mfg_largest_cluster_jobs_within_{suffix}"] = (
-                    float(band_jobs.max()) if len(band_jobs) else 0.0
-                )
-
-            records.append(record)
-        return records
-
-    _mfg_exposure_records = _cluster_exposure_records(
-        _mfg_neighborhood_base, mfg_clusters, mfg_distance_bands_km
-    )
-    _mfg_exposure_frame = pd.DataFrame(_mfg_exposure_records)
-
-    mfg_neighborhood_features = _mfg_neighborhood_base.merge(
-        _mfg_exposure_frame,
-        on="neighborhood_idx",
-        how="left",
-    )
-
-    mfg_cluster_feature_cols = [
-        col
-        for col in mfg_neighborhood_features.columns
-        if col not in {"neighborhood_idx", "name", "name_detail", "geometry"}
-    ]
-
-    mfg_neighborhood_feature_frame = mfg_neighborhood_features.set_index("name_detail")[
-        mfg_cluster_feature_cols
-    ]
-
-    mfg_neighborhood_feature_summary = mfg_neighborhood_features[
-        [
-            "name_detail",
-            "nearest_mfg_cluster_rank",
-            "nearest_mfg_cluster_jobs",
-            "mfg_distance_nearest_cluster_km",
-            "mfg_jobs_within_2km",
-            "log_mfg_jobs_within_2km",
-            "mfg_cluster_gravity_inv_sq",
-            "log_mfg_cluster_gravity_inv_sq",
-            "intersects_mfg_cluster",
-            "within_1km_of_mfg_cluster",
-        ]
-    ].sort_values("mfg_distance_nearest_cluster_km")
-
-    mfg_neighborhood_feature_summary.head(20)
-    return (
-        mfg_cluster_feature_cols,
-        mfg_neighborhood_feature_frame,
-        mfg_neighborhood_features,
-    )
-
-
-@app.cell(hide_code=True)
-def md_mfg_diagnostics():
-    mo.md("""
-    ### Manufacturing diagnostics
-
-    Diagnostic layers are exported separately for maps and sanity checks. These layers are not the canonical neighborhood-feature source; the neighborhood-level manufacturing columns are joined into `df_final` and written to `col_final.gpkg`.
-    """)
-    return
-
-
-@app.cell
-def mfg_diagnostics_export(mfg_clusters, mfg_hotspot_cells, mfg_hotspot_grid):
-    mfg_spatial_diagnostics_output_path = Path(
-        "./data/processed/mfg_spatial_diagnostics.gpkg"
-    )
-    if mfg_spatial_diagnostics_output_path.exists():
-        mfg_spatial_diagnostics_output_path.unlink()
-
-    mfg_hotspot_grid.to_file(
-        mfg_spatial_diagnostics_output_path,
-        layer="mfg_hotspot_grid",
-        driver="GPKG",
-    )
-    mfg_hotspot_cells.to_file(
-        mfg_spatial_diagnostics_output_path,
-        layer="mfg_hotspot_cells",
-        driver="GPKG",
-    )
-    mfg_clusters.to_file(
-        mfg_spatial_diagnostics_output_path,
-        layer="mfg_clusters",
-        driver="GPKG",
-    )
-
-    mfg_spatial_diagnostics_layers = [
-        "mfg_hotspot_grid",
-        "mfg_hotspot_cells",
-        "mfg_clusters",
-    ]
-
-    mfg_spatial_diagnostics_output_path
-    return (mfg_spatial_diagnostics_output_path,)
+    return (sector_cluster_diagnostics_paths,)
 
 
 @app.cell(hide_code=True)
@@ -1170,7 +613,7 @@ def md_final_export():
     mo.md("""
     ## Canonical neighborhood export
 
-    The final neighborhood table combines cleaned geometries, accessibility features, travel times, built-area history, and manufacturing-cluster exposure. This section writes `col_final.gpkg`, which should be the only source used by later notebooks for neighborhood-level features.
+    The final neighborhood table combines cleaned geometries, accessibility features, travel times, built-area history, and sector-cluster exposure. This section writes `col_final.gpkg`, which should be the only source used by later notebooks for neighborhood-level features.
     """)
     return
 
@@ -1193,16 +636,18 @@ def _(
     df_areas,
     df_col,
     df_travel_times,
-    mfg_neighborhood_feature_frame,
+    sector_cluster_neighborhood_feature_frame,
 ):
     df_final = (
         pd.concat([df_col, df_accessibility_jobs_filtered, df_travel_times], axis=1)
         .assign(accessibility_services=accessibility_services)
         .set_index("name_detail")
         .join(df_areas)
-        .join(mfg_neighborhood_feature_frame)
+        .join(sector_cluster_neighborhood_feature_frame)
         .reset_index()
-        .pipe(lambda df: gpd.GeoDataFrame(df, geometry="geometry", crs=df_col.crs))
+        .pipe(
+            lambda frame: gpd.GeoDataFrame(frame, geometry="geometry", crs=df_col.crs)
+        )
     )
 
     df_final.to_file("./data/processed/col_final.gpkg")
@@ -1214,18 +659,19 @@ def md_validation():
     mo.md("""
     ## Export validation
 
-    The validation cell checks row counts, uniqueness, manufacturing feature presence, distance sanity, monotonic distance-band totals, diagnostics output, and removal of the legacy manufacturing sidecar. It is meant to make the feature-export contract visible before downstream analysis notebooks consume the outputs.
+    The validation cell checks row counts, uniqueness, sector-cluster feature presence, distance sanity, monotonic distance-band totals, diagnostics output, and removal of the legacy manufacturing sidecar. It is meant to make the feature-export contract visible before downstream analysis notebooks consume the outputs.
     """)
     return
 
 
 @app.cell
-def mfg_feature_validation(
+def sector_cluster_feature_validation(
     df_col,
     df_final,
-    mfg_cluster_feature_cols,
-    mfg_neighborhood_features,
-    mfg_spatial_diagnostics_output_path,
+    sector_cluster_diagnostics_paths,
+    sector_cluster_feature_cols,
+    sector_cluster_neighborhood_features,
+    sector_cluster_results,
 ):
     legacy_mfg_cluster_feature_output_path = Path(
         "./data/processed/mfg_cluster_neighborhood_features.gpkg"
@@ -1233,74 +679,85 @@ def mfg_feature_validation(
     if legacy_mfg_cluster_feature_output_path.exists():
         legacy_mfg_cluster_feature_output_path.unlink()
 
-    _mfg_monotonic_band_checks = {
-        "jobs_1km_ge_500m": (
-            df_final["mfg_jobs_within_1km"] >= df_final["mfg_jobs_within_500m"]
-        ).all(),
-        "jobs_2km_ge_1km": (
-            df_final["mfg_jobs_within_2km"] >= df_final["mfg_jobs_within_1km"]
-        ).all(),
-        "jobs_5km_ge_2km": (
-            df_final["mfg_jobs_within_5km"] >= df_final["mfg_jobs_within_2km"]
-        ).all(),
-    }
-    _mfg_missing_feature_cols = sorted(
-        set(mfg_cluster_feature_cols) - set(df_final.columns)
+    _missing_feature_cols = sorted(
+        set(sector_cluster_feature_cols) - set(df_final.columns)
+    )
+    _validation_rows = [
+        {
+            "check": "df_final_count_matches_df_col",
+            "passed": len(df_final) == len(df_col),
+            "value": len(df_final),
+        },
+        {
+            "check": "name_detail_unique",
+            "passed": df_final["name_detail"].is_unique,
+            "value": int(df_final["name_detail"].nunique()),
+        },
+        {
+            "check": "sector_cluster_feature_columns_present",
+            "passed": len(_missing_feature_cols) == 0,
+            "value": ", ".join(_missing_feature_cols),
+        },
+        {
+            "check": "col_final_written",
+            "passed": Path("./data/processed/col_final.gpkg").exists(),
+            "value": "./data/processed/col_final.gpkg",
+        },
+    ]
+
+    for _result in sector_cluster_results:
+        _prefix = _result.config.output_prefix
+        _features = sector_cluster_neighborhood_features[_prefix]
+        _distance_col = f"{_prefix}_distance_nearest_cluster_km"
+        _distances = df_final[_distance_col].dropna()
+        _validation_rows.extend(
+            [
+                {
+                    "check": f"{_prefix}_neighborhood_count_matches_df_col",
+                    "passed": len(_features) == len(df_col),
+                    "value": len(_features),
+                },
+                {
+                    "check": f"{_prefix}_distances_nonnegative",
+                    "passed": _distances.ge(0).all(),
+                    "value": float(_distances.min())
+                    if not _distances.empty
+                    else np.nan,
+                },
+                {
+                    "check": f"{_prefix}_diagnostics_written",
+                    "passed": sector_cluster_diagnostics_paths[_prefix].exists(),
+                    "value": str(sector_cluster_diagnostics_paths[_prefix]),
+                },
+            ]
+        )
+        for _lower_band, _upper_band in zip(
+            _result.config.distance_bands_km,
+            _result.config.distance_bands_km[1:],
+            strict=False,
+        ):
+            _lower_col = f"{_prefix}_jobs_within_{band_suffix(_lower_band)}"
+            _upper_col = f"{_prefix}_jobs_within_{band_suffix(_upper_band)}"
+            _validation_rows.append(
+                {
+                    "check": f"{_prefix}_{_upper_col}_ge_{_lower_col}",
+                    "passed": bool(
+                        (df_final[_upper_col] >= df_final[_lower_col]).all()
+                    ),
+                    "value": bool((df_final[_upper_col] >= df_final[_lower_col]).all()),
+                }
+            )
+
+    _validation_rows.append(
+        {
+            "check": "legacy_sidecar_removed",
+            "passed": not legacy_mfg_cluster_feature_output_path.exists(),
+            "value": str(legacy_mfg_cluster_feature_output_path),
+        }
     )
 
-    mfg_feature_export_validation = pd.DataFrame(
-        [
-            {
-                "check": "neighborhood_count_matches_df_col",
-                "passed": len(mfg_neighborhood_features) == len(df_col),
-                "value": len(mfg_neighborhood_features),
-            },
-            {
-                "check": "df_final_count_matches_df_col",
-                "passed": len(df_final) == len(df_col),
-                "value": len(df_final),
-            },
-            {
-                "check": "name_detail_unique",
-                "passed": df_final["name_detail"].is_unique,
-                "value": int(df_final["name_detail"].nunique()),
-            },
-            {
-                "check": "mfg_feature_columns_present",
-                "passed": len(_mfg_missing_feature_cols) == 0,
-                "value": ", ".join(_mfg_missing_feature_cols),
-            },
-            {
-                "check": "distances_nonnegative",
-                "passed": df_final["mfg_distance_nearest_cluster_km"]
-                .dropna()
-                .ge(0)
-                .all(),
-                "value": float(df_final["mfg_distance_nearest_cluster_km"].min()),
-            },
-            *[
-                {"check": check, "passed": bool(passed), "value": bool(passed)}
-                for check, passed in _mfg_monotonic_band_checks.items()
-            ],
-            {
-                "check": "col_final_written",
-                "passed": Path("./data/processed/col_final.gpkg").exists(),
-                "value": "./data/processed/col_final.gpkg",
-            },
-            {
-                "check": "diagnostics_written",
-                "passed": mfg_spatial_diagnostics_output_path.exists(),
-                "value": str(mfg_spatial_diagnostics_output_path),
-            },
-            {
-                "check": "legacy_sidecar_removed",
-                "passed": not legacy_mfg_cluster_feature_output_path.exists(),
-                "value": str(legacy_mfg_cluster_feature_output_path),
-            },
-        ]
-    )
-
-    mfg_feature_export_validation
+    sector_cluster_feature_export_validation = pd.DataFrame(_validation_rows)
+    sector_cluster_feature_export_validation
     return
 
 

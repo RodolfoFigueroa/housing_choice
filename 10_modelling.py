@@ -1,13 +1,11 @@
 import marimo
 
 __generated_with = "0.23.9"
-app = marimo.App()
+app = marimo.App(width="medium")
 
-
-@app.cell
-def _():
-
+with app.setup:
     import math
+    import os
     import re
     import warnings
     from pathlib import Path
@@ -28,30 +26,10 @@ def _():
     from scipy.special import logsumexp
 
     warnings.filterwarnings("ignore", category=FutureWarning)
-    return (
-        BIOGEME,
-        Beta,
-        Parameters,
-        Path,
-        Variable,
-        db,
-        get_pandas_estimated_parameters,
-        gpd,
-        logsumexp,
-        math,
-        minimize,
-        mo,
-        models,
-        np,
-        pd,
-        plt,
-        re,
-        sns,
-    )
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md("""
     # Housing Choice Modelling
 
@@ -61,10 +39,10 @@ def _(mo):
 
 
 @app.cell
-def _(Path):
-
-    NEIGHBORHOOD_FEATURES_PATH = Path("./data/processed/col_final.gpkg")
-    TRANSACTIONS_PATH = Path("./data/processed/transactions_final.parquet")
+def _():
+    GENERATED_PATH = Path(os.environ["DATA_PATH"]) / "generated"
+    NEIGHBORHOOD_FEATURES_PATH = Path(GENERATED_PATH / "col_final.gpkg")
+    TRANSACTIONS_PATH = Path(GENERATED_PATH / "transactions_final.parquet")
 
     TRANSACTION_THRESH = 20
     MODELING_YEAR_MIN = 2020
@@ -93,7 +71,7 @@ def _(Path):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md("""
     ## Setup Helpers
 
@@ -104,23 +82,10 @@ def _(mo):
 
 @app.cell
 def _(
-    BIOGEME,
     BIOGEME_MODEL_PREFIX,
-    Beta,
     MISSING_VALUE_SENTINEL,
-    Parameters,
     TARGET_SCALE_LOWER,
     TARGET_SCALE_UPPER,
-    Variable,
-    db,
-    get_pandas_estimated_parameters,
-    logsumexp,
-    math,
-    minimize,
-    models,
-    np,
-    pd,
-    re,
 ):
 
     def safe_identifier(value):
@@ -157,11 +122,52 @@ def _(
 
     def build_feature_catalog(neighborhood_raw):
         rows = []
-        selected_mfg_features = {
-            "mfg_distance_nearest_cluster_km": "scaled_distance",
-            "log_mfg_jobs_within_2km": "already_log_scaled",
-            "log_mfg_cluster_gravity_inv_sq": "already_log_scaled",
+        selected_cluster_features = {
+            "mfg_distance_nearest_cluster_km": {
+                "family": "manufacturing_cluster",
+                "role": "mfg_screen",
+                "transform_kind": "scaled_distance",
+            },
+            "log_mfg_jobs_within_2km": {
+                "family": "manufacturing_cluster",
+                "role": "mfg_screen",
+                "transform_kind": "already_log_scaled",
+            },
+            "log_mfg_cluster_gravity_inv_sq": {
+                "family": "manufacturing_cluster",
+                "role": "mfg_screen",
+                "transform_kind": "already_log_scaled",
+            },
+            "logistics_distance_nearest_cluster_km": {
+                "family": "logistics_cluster",
+                "role": "logistics_screen",
+                "transform_kind": "scaled_distance",
+            },
+            "log_logistics_jobs_within_2km": {
+                "family": "logistics_cluster",
+                "role": "logistics_screen",
+                "transform_kind": "already_log_scaled",
+            },
+            "log_logistics_cluster_gravity_inv_sq": {
+                "family": "logistics_cluster",
+                "role": "logistics_screen",
+                "transform_kind": "already_log_scaled",
+            },
         }
+        cluster_column_rules = [
+            ("mfg", "manufacturing_cluster"),
+            ("logistics", "logistics_cluster"),
+        ]
+
+        def cluster_family_for_column(column):
+            for prefix, family in cluster_column_rules:
+                if (
+                    column.startswith(f"{prefix}_")
+                    or column.startswith(f"nearest_{prefix}_")
+                    or f"_{prefix}_cluster" in column
+                ):
+                    return family
+            return None
 
         for column in neighborhood_raw.columns:
             if column in {"name", "name_detail", "geometry"}:
@@ -264,8 +270,9 @@ def _(
                         "reason": "dynamic supply proxy",
                     }
                 )
-            elif column in selected_mfg_features:
-                if selected_mfg_features[column] == "scaled_distance":
+            elif column in selected_cluster_features:
+                cluster_feature = selected_cluster_features[column]
+                if cluster_feature["transform_kind"] == "scaled_distance":
                     denominator = nice_scale_denominator(neighborhood_raw[column])
                     model_column = f"{column}_scaled"
                     transform = f"divide by {denominator:g} km"
@@ -277,24 +284,20 @@ def _(
                     {
                         "source_column": column,
                         "model_column": model_column,
-                        "family": "manufacturing_cluster",
-                        "role": "mfg_screen",
+                        "family": cluster_feature["family"],
+                        "role": cluster_feature["role"],
                         "transform": transform,
                         "scale_denominator": denominator,
                         "eligible": True,
                         "reason": "selected interpretable cluster exposure",
                     }
                 )
-            elif (
-                column.startswith("mfg_")
-                or column.startswith("nearest_mfg_")
-                or "_mfg_cluster" in column
-            ):
+            elif (cluster_family := cluster_family_for_column(column)) is not None:
                 rows.append(
                     {
                         "source_column": column,
                         "model_column": None,
-                        "family": "manufacturing_cluster",
+                        "family": cluster_family,
                         "role": "available_not_screened",
                         "transform": "not used in v1 model specs",
                         "scale_denominator": np.nan,
@@ -837,7 +840,7 @@ def _(
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md("""
     ## Data Inputs
 
@@ -847,7 +850,7 @@ def _(mo):
 
 
 @app.cell
-def _(NEIGHBORHOOD_FEATURES_PATH, TRANSACTIONS_PATH, gpd, pd):
+def _(NEIGHBORHOOD_FEATURES_PATH, TRANSACTIONS_PATH):
 
     df_neighborhood_raw = gpd.read_file(NEIGHBORHOOD_FEATURES_PATH)
     df_transactions_raw = pd.read_parquet(TRANSACTIONS_PATH)
@@ -873,7 +876,7 @@ def _(NEIGHBORHOOD_FEATURES_PATH, TRANSACTIONS_PATH, gpd, pd):
 
 
 @app.cell
-def _(df_transactions_raw, pd):
+def _(df_transactions_raw):
 
     transaction_year_counts_raw = (
         df_transactions_raw.assign(
@@ -905,7 +908,7 @@ def _(transaction_year_counts_raw):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md("""
     ## Feature Catalog
 
@@ -948,8 +951,7 @@ def _(feature_catalog):
 
 
 @app.cell
-def _(df_neighborhood_raw, feature_catalog, pd, prepare_neighborhood_features):
-
+def _(df_neighborhood_raw, feature_catalog, prepare_neighborhood_features):
     prepared_neighborhood_features = prepare_neighborhood_features(
         df_neighborhood_raw,
         feature_catalog,
@@ -974,10 +976,15 @@ def _(df_neighborhood_raw, feature_catalog, pd, prepare_neighborhood_features):
     mfg_candidate_cols = feature_catalog.loc[
         lambda df: df["role"].eq("mfg_screen") & df["eligible"], "model_column"
     ].tolist()
+    logistics_candidate_cols = feature_catalog.loc[
+        lambda df: df["role"].eq("logistics_screen") & df["eligible"],
+        "model_column",
+    ].tolist()
     model_ready_feature_cols = [
         *base_control_cols,
         *job_candidate_cols,
         *mfg_candidate_cols,
+        *logistics_candidate_cols,
     ]
 
     prepared_feature_summary = pd.DataFrame(
@@ -988,6 +995,10 @@ def _(df_neighborhood_raw, feature_catalog, pd, prepare_neighborhood_features):
                 "family": "manufacturing_cluster_candidates",
                 "features": len(mfg_candidate_cols),
             },
+            {
+                "family": "logistics_cluster_candidates",
+                "features": len(logistics_candidate_cols),
+            },
             {"family": "built_area_history", "features": len(built_area_cols)},
         ]
     )
@@ -996,6 +1007,7 @@ def _(df_neighborhood_raw, feature_catalog, pd, prepare_neighborhood_features):
         base_control_cols,
         built_area_cols,
         job_candidate_cols,
+        logistics_candidate_cols,
         mfg_candidate_cols,
         model_ready_feature_cols,
         prepared_neighborhood_features,
@@ -1030,7 +1042,7 @@ def _(scale_audit):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md("""
     ## Choice Set Preparation
 
@@ -1047,7 +1059,6 @@ def _(
     align_choice_data,
     df_neighborhood_raw,
     df_transactions_raw,
-    pd,
     prepare_transactions,
     prepared_neighborhood_features,
 ):
@@ -1095,7 +1106,7 @@ def _(
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md("""
     ### Sample Scope Caveat
 
@@ -1142,7 +1153,7 @@ def _(transaction_count_by_neighborhood):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md("""
     ## Model Specifications
 
@@ -1155,11 +1166,10 @@ def _(mo):
 def _(
     base_control_cols,
     job_candidate_cols,
+    logistics_candidate_cols,
     mfg_candidate_cols,
-    pd,
     safe_identifier,
 ):
-
     model_specs = {
         "baseline_no_jobs": {
             "family": "baseline",
@@ -1179,19 +1189,28 @@ def _(
             "static_cols": [_feature, *base_control_cols],
             "candidate_feature": _feature,
         }
+    for _feature in logistics_candidate_cols:
+        model_specs[f"logistics__{safe_identifier(_feature)}"] = {
+            "family": "logistics_cluster",
+            "static_cols": [_feature, *base_control_cols],
+            "candidate_feature": _feature,
+        }
 
-    model_spec_summary = pd.DataFrame(
-        [
+    _model_spec_summary_rows = []
+    for _spec_id, _spec in model_specs.items():
+        _static_cols = _spec["static_cols"]
+        if not isinstance(_static_cols, list):
+            raise TypeError("model_specs static_cols must be a list")
+        _model_spec_summary_rows.append(
             {
                 "spec_id": _spec_id,
                 "family": _spec["family"],
                 "candidate_feature": _spec["candidate_feature"],
-                "static_features": len(_spec["static_cols"]),
-                "all_features": ", ".join(_spec["static_cols"] + ["log_built_area_ha"]),
+                "static_features": len(_static_cols),
+                "all_features": ", ".join(_static_cols + ["log_built_area_ha"]),
             }
-            for _spec_id, _spec in model_specs.items()
-        ]
-    )
+        )
+    model_spec_summary = pd.DataFrame(_model_spec_summary_rows)
     model_spec_summary
     return model_spec_summary, model_specs
 
@@ -1204,7 +1223,6 @@ def _(
     compute_feature_diagnostics,
     df_transactions_model,
     model_specs,
-    pd,
 ):
 
     _spec_diag_rows = []
@@ -1240,7 +1258,7 @@ def _(
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md("""
     ## Fast Screening
 
@@ -1256,7 +1274,6 @@ def _(
     df_transactions_model,
     fit_fast_mnl_screen,
     model_specs,
-    pd,
 ):
 
     _screen_rows = []
@@ -1369,7 +1386,7 @@ def _(model_spec_summary, screening_coefficients):
 
 
 @app.cell(hide_code=True)
-def _(FINALIST_COUNT, mo):
+def _(FINALIST_COUNT):
     mo.md(f"""
     ## Biogeme Finalist Selection
 
@@ -1452,7 +1469,7 @@ def _(FINALIST_COUNT, model_spec_summary, model_specs, screening_comparison):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md("""
     ## Final Biogeme Estimation
 
@@ -1469,7 +1486,6 @@ def _(
     finalist_specs,
     fit_biogeme_model,
     model_spec_summary,
-    pd,
 ):
 
     biogeme_artifacts = {}
@@ -1511,7 +1527,7 @@ def _(
 
 
 @app.cell
-def _(biogeme_artifacts, biogeme_model_comparison, model_specs, pd):
+def _(biogeme_artifacts, biogeme_model_comparison, model_specs):
 
     selected_spec_id = str(biogeme_model_comparison.iloc[0]["spec_id"])
     selected_artifact = biogeme_artifacts[selected_spec_id]
@@ -1551,7 +1567,7 @@ def _(run_derivative_check, selected_artifact):
 
 
 @app.cell
-def _(BIOGEME_MODEL_PREFIX, pd, selected_derivative_check):
+def _(BIOGEME_MODEL_PREFIX, selected_derivative_check):
 
     biogeme_guardrail_summary = pd.DataFrame(
         [
@@ -1572,7 +1588,7 @@ def _(BIOGEME_MODEL_PREFIX, pd, selected_derivative_check):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md("""
     ## Fit, Coefficients, And Prediction Checks
 
@@ -1644,7 +1660,7 @@ def _(
 
 
 @app.cell
-def _(plt, selected_feature_correlation, sns):
+def _(selected_feature_correlation):
 
     selected_correlation_heatmap_figure, selected_correlation_heatmap_axis = (
         plt.subplots(figsize=(7, 6))
@@ -1709,7 +1725,7 @@ def _(selected_choice_share_summary):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md("""
     ## Interpreting The Logistics Coefficient
 
@@ -1804,7 +1820,7 @@ def _(logistics_sample_diagnostic_frame):
 
 
 @app.cell
-def _(logistics_sample_diagnostic_frame, plt, sns):
+def _(logistics_sample_diagnostic_frame):
 
     _logistics_feature = "jobs_logistics_20_2025_scaled"
     logistics_share_plot_figure, logistics_share_plot_axis = plt.subplots(

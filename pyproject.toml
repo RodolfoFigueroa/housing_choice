@@ -41,9 +41,10 @@ dependencies = [
 ]
 
 [tool.ruff.lint]
+per-file-ignores = { "tests/**/*.py" = ["S101"] }
+
 select = ["ALL"]
 ignore = ["D", "COM812", "PLR2004", "PLR1711"]
-
 [tool.basedpyright]
 typeCheckingMode = "standard"
 ignore = ["**/*.ipynb"]
