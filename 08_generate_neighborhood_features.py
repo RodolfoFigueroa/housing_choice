@@ -18,7 +18,6 @@ with app.setup:
     import pandas as pd
     import sqlalchemy
     from lyra.api import LyraAPIClient
-    from pyproj import CRS
 
     from housing_choice.funcs import (
         calculate_accessibility_jobs,
@@ -41,9 +40,7 @@ def md_overview():
     mo.md("""
     # Neighborhood feature build
 
-    This notebook is the source of truth for neighborhood-level modeling features. It builds two canonical artifacts: `data/processed/col_final.gpkg`, which contains one row per neighborhood geometry with all derived features, and `data/processed/transactions_final.parquet`, which contains home purchases restricted to neighborhoods retained for analysis.
-
-    The notebook is organized as a data pipeline. Each section adds one feature family or prepares an external input, and the final export cell assembles the canonical neighborhood table.
+    This notebook assembles the canonical modeling feature table from upstream artifacts. Cleaned neighborhood geometries and cleaned transaction names now come from `07_clean_neighborhoods.py`; this notebook adds cluster, accessibility, travel-time, and built-area features before writing `col_final.gpkg` and `transactions_final.parquet`.
     """)
     return
 
@@ -93,251 +90,80 @@ def _():
 @app.cell(hide_code=True)
 def md_neighborhood_geometry():
     mo.md("""
-    ## Neighborhood geometry normalization
+    ## Cleaned Neighborhood Inputs
 
-    The source neighborhood layer contains naming inconsistencies and several geometries that need to be merged or relabeled before analysis. The helper cells below normalize names, apply manual geometry corrections, filter to neighborhoods observed in transactions, and project the result to `EPSG:6372` for metric spatial operations.
+    Neighborhood name normalization, manual geometry corrections, transaction address cleaning, and CRS projection are handled upstream in `07_clean_neighborhoods.py`. This section reads those stable artifacts so downstream feature calculations share the same neighborhood universe.
     """)
     return
 
 
-@app.function
-def clean_fracc_col(col: pd.Series) -> pd.Series:
-    return (
-        col.str.casefold()
-        .str.normalize("NFKD")
-        .str.encode("ascii", errors="ignore")
-        .str.decode("utf-8")
-        .str.replace(r"fracc(\.|ionamiento)?", "", regex=True)
-        .str.replace("desarrollo urbano", "")
-        .str.strip()
-    )
+@app.cell(hide_code=True)
+def md_cleaning_artifacts():
+    mo.md("""
+    `07_clean_neighborhoods.py` exports `neighborhoods_clean.gpkg` and `transactions_clean.parquet` under the generated data directory. Re-run that notebook when raw neighborhood names, manual corrections, or transaction name cleaning rules change.
+    """)
+    return
 
 
 @app.cell(hide_code=True)
 def md_transactions_input():
     mo.md("""
-    ## Transaction input
+    ## Clean Transaction Input
 
-    The transaction workbook is cleaned into a consistent tabular source. Neighborhood names in this table define the residential universe used later: geometries are filtered to addresses that appear in the transaction data, and the final transaction export is restricted to those retained neighborhoods.
+    The transaction artifact contains cleaned address names and original transaction attributes. The final export at the end of this notebook still filters purchases to neighborhoods retained in the feature table.
     """)
     return
 
 
 @app.cell
-def _(data_path):
-    df_transactions: pd.DataFrame = (
-        pd.read_excel(
-            data_path
-            / "processing"
-            / "2"
-            / "Analytics - RPPC - Interés Social - 2020 a 2025.xlsx",
-            usecols=[
-                "Fecha de operación",
-                "Inmobiliaria",
-                "Valor de operación",
-                "Superficie",
-                "Categoría",
-                "Dirección",
-                "Fraccionamiento",
-            ],
-        )
-        .rename(
-            columns={
-                "Fecha de operación": "purchase_date",
-                "Inmobiliaria": "agency",
-                "Valor de operación": "price",
-                "Superficie": "area_m2",
+def _(generated_path):
+    transactions_clean_path = generated_path / "transactions_clean.parquet"
+    df_transactions = pd.read_parquet(transactions_clean_path)
+
+    transactions_input_summary = pd.DataFrame(
+        [
+            {
+                "artifact": "transactions_clean",
+                "path": str(transactions_clean_path),
+                "rows": len(df_transactions),
+                "unique_addresses": df_transactions["address"].nunique(),
+                "min_purchase_date": df_transactions["purchase_date"].min(),
+                "max_purchase_date": df_transactions["purchase_date"].max(),
             }
-        )
-        .loc[
-            lambda df: df["Categoría"].isin(
-                ["Compraventa Exe", "Competencia inmobiliaria"]
-            )
         ]
-        .drop(columns=["Categoría"])
-        .dropna(subset=["Dirección"])
-        .rename(columns={"Dirección": "address"})
-        .assign(
-            address=lambda df: (
-                clean_fracc_col(df["address"])
-                .replace(
-                    {
-                        "angeles de puebla segunda seccion": "angeles de puebla",
-                        "la condesa seccion oleaga ampliacion": "la condesa seccion oleaga",
-                    }
-                )
-                .where(
-                    lambda s: ~s.str.startswith("rincones de puebla"),
-                    "rincones de puebla",
-                )
-                .where(
-                    lambda s: ~s.str.startswith("mision de puebla"), "mision de puebla"
-                )
-            )
-        )
     )
+    transactions_input_summary
     return (df_transactions,)
 
 
-@app.function
-def merge_and_concat(
-    df: gpd.GeoDataFrame | pd.DataFrame,
-    mask: pd.Series,
-    *,
-    name: str,
-    name_detail: str,
-    access: str,
-    crs: CRS | str,
-) -> gpd.GeoDataFrame:
-    df_sol = (
-        pd.Series(
-            {
-                "name": name,
-                "name_detail": name_detail,
-                "geometry": df.loc[mask, "geometry"].union_all(),
-                "access": access,
-            }
-        )
-        .to_frame()
-        .transpose()
-    )
-    return pd.concat(
-        [
-            df.loc[~mask],
-            df_sol,
-        ],
-        ignore_index=True,
-    ).pipe(lambda df: gpd.GeoDataFrame(df, geometry="geometry", crs=crs))
+@app.cell(hide_code=True)
+def md_neighborhood_artifact():
+    mo.md("""
+    The cleaned neighborhood artifact is projected to `EPSG:6372`, has one row per retained neighborhood, and preserves the `name`, `name_detail`, `access`, and `geometry` columns expected by the feature pipeline.
+    """)
+    return
 
 
 @app.cell
-def _(data_path, df_transactions: pd.DataFrame):
-    df_col = (
-        gpd.read_file(
-            data_path / "initial" / "lim_cols_cp",
-            columns=["COLONIAS", "Col_Secc", "ACCESO", "geometry"],
-        )
-        .dropna(subset=["COLONIAS"])
-        .rename(
-            columns={"COLONIAS": "name", "Col_Secc": "name_detail", "ACCESO": "access"}
-        )
-        .assign(
-            name=lambda df: clean_fracc_col(df["name"]).replace(
-                {"condominios villanova": "condominio villanova"}
-            ),
-            name_detail=lambda df: (
-                clean_fracc_col(df["name_detail"])
-                .fillna(df["name"])
-                .replace({"condominios villanova": "condominio villanova"})
-            ),
-        )
-    )
+def _(df_transactions, generated_path):
+    neighborhoods_clean_path = generated_path / "neighborhoods_clean.gpkg"
+    df_col = gpd.read_file(neighborhoods_clean_path)
 
-    crs = df_col.crs
-    if crs is None:
-        raise ValueError
-
-    # == Parajes de puebla == #
-
-    parajes_mask = df_col["name"] == "parajes de puebla"
-    df_parajes = df_col.loc[parajes_mask]
-
-    parajes_first = df_parajes.loc[
-        lambda df: df["name_detail"] == "parajes de puebla"
-    ].iloc[0]
-    parajes_second = pd.Series(
-        {
-            "name": "parajes de puebla",
-            "name_detail": "parajes de puebla segunda seccion",
-            "geometry": df_parajes.loc[
-                lambda df: df["name_detail"] != "parajes de puebla", "geometry"
-            ].union_all(),
-            "access": "LIBRE",
-        }
-    )
-
-    df_parajes = pd.concat(
-        [parajes_first, parajes_second], axis=1, ignore_index=True
-    ).transpose()
-
-    df_col = pd.concat(
+    clean_neighborhood_input_summary = pd.DataFrame(
         [
-            df_col.loc[~parajes_mask],
-            df_parajes,
-        ],
-        ignore_index=True,
+            {
+                "artifact": "neighborhoods_clean",
+                "path": str(neighborhoods_clean_path),
+                "rows": len(df_col),
+                "unique_name_detail": df_col["name_detail"].nunique(),
+                "crs": df_col.crs.to_string(),
+                "all_names_in_transactions": bool(
+                    df_col["name_detail"].isin(df_transactions["address"]).all()
+                ),
+            }
+        ]
     )
-
-    # == Valle oriente == #
-    df_col = merge_and_concat(
-        df_col,
-        df_col["name"] == "valle oriente",
-        name="valle oriente",
-        name_detail="valle oriente",
-        access="LIBRE",
-        crs=crs,
-    )
-
-    # == Sol de Puebla == #
-    df_col = merge_and_concat(
-        df_col,
-        df_col["name_detail"] == "sol de puebla",
-        name="sol de puebla",
-        name_detail="sol de puebla",
-        access="LIBRE",
-        crs=crs,
-    )
-
-    # == Quinta granada == #
-    df_col = merge_and_concat(
-        df_col,
-        df_col["name"] == "quinta granada",
-        name="quinta granada",
-        name_detail="quinta granada",
-        access="RESTRINGIDO",
-        crs=crs,
-    )
-
-    # == Villa Toledo == #
-    df_col = merge_and_concat(
-        df_col,
-        df_col["name"] == "villa toledo",
-        name="villa toledo",
-        name_detail="villa toledo",
-        access="RESTRINGIDO",
-        crs=crs,
-    )
-
-    # == Valle de puebla == #
-    valle_mask = df_col["name"].str.contains("valle de puebla")
-    df_valle = df_col.loc[valle_mask].assign(
-        name_detail=lambda df: df["name_detail"].str.replace("etapa", "seccion")
-    )
-
-    df_col = pd.concat(
-        [
-            df_col.loc[~valle_mask],
-            df_valle,
-        ],
-        ignore_index=True,
-    )
-
-    df_col = merge_and_concat(
-        df_col,
-        df_col["name_detail"] == "valle de puebla sexta seccion",
-        name="valle de puebla",
-        name_detail="valle de puebla sexta seccion",
-        access="LIBRE",
-        crs=crs,
-    )
-
-    # Final
-
-    df_col = (
-        df_col.loc[lambda df: df["name_detail"].isin(df_transactions["address"])]
-        .pipe(lambda df: gpd.GeoDataFrame(df, geometry="geometry", crs=crs))
-        .to_crs("EPSG:6372")
-    )
+    clean_neighborhood_input_summary
     return (df_col,)
 
 
@@ -832,7 +658,7 @@ def md_transactions_export():
 
 
 @app.cell
-def _(df_col, df_transactions: pd.DataFrame, generated_path):
+def _(df_col, df_transactions, generated_path):
     df_transactions_final = df_transactions.loc[
         lambda df: df["address"].isin(df_col["name_detail"])
     ]
