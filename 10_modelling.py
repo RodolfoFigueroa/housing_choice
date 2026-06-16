@@ -78,7 +78,6 @@ def _(Path):
     TARGET_SCALE_LOWER = 1.0
     TARGET_SCALE_UPPER = 10.0
     MISSING_VALUE_SENTINEL = 99999
-
     return (
         BIOGEME_MODEL_PREFIX,
         FINALIST_COUNT,
@@ -1449,7 +1448,6 @@ def _(FINALIST_COUNT, model_spec_summary, model_specs, screening_comparison):
         ],
     ]
     finalist_selection_table
-
     return (finalist_specs,)
 
 
@@ -1760,7 +1758,6 @@ def _(selected_choice_share_summary, selected_diagnostics_frame):
     )
 
     logistics_correlation_summary
-
     return (logistics_sample_diagnostic_frame,)
 
 
@@ -1803,7 +1800,6 @@ def _(logistics_sample_diagnostic_frame):
         .head(15)
     )
     logistics_high_accessibility_table
-
     return
 
 
@@ -1831,7 +1827,6 @@ def _(logistics_sample_diagnostic_frame, plt, sns):
     )
     logistics_share_plot_figure.tight_layout()
     logistics_share_plot_figure
-
     return
 
 
