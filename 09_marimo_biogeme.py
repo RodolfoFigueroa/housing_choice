@@ -28,6 +28,7 @@ def _():
 
     This notebook prepares neighborhood-level alternatives, estimates a baseline multinomial logit model, screens candidate job-accessibility covariates, and compares the selected model against the baseline.
     """)
+    return
 
 
 @app.cell(hide_code=True)
@@ -37,6 +38,7 @@ def _():
 
     Shared imports live in the setup cell. The constants below define the feature groups reused by the baseline, screening, and selected Biogeme models.
     """)
+    return
 
 
 @app.cell
@@ -58,6 +60,7 @@ def _():
         *static_feature_cols,
         *built_area_cols,
     ]
+    print(wanted_cols)
     return (
         built_area_cols,
         model_feature_cols,
@@ -73,6 +76,7 @@ def _():
 
     These helpers keep repeated feature diagnostics, wide choice-frame construction, and Biogeme model setup in one place.
     """)
+    return
 
 
 @app.function
@@ -307,6 +311,7 @@ def _():
 
     Load the neighborhood attributes and transaction choices, then keep only neighborhoods with enough observed transactions for estimation.
     """)
+    return
 
 
 @app.cell
@@ -390,6 +395,7 @@ def _():
 
     The baseline uses all-job accessibility, local services, travel-time controls, restricted-access status, and year-specific built area.
     """)
+    return
 
 
 @app.cell
@@ -455,6 +461,7 @@ def _(
 @app.cell
 def _(results):
     print(results.short_summary())
+    return
 
 
 @app.cell
@@ -482,6 +489,7 @@ def _(estimated_parameters):
     baseline_coefficient_plot.set_ylabel("")
     baseline_coefficient_plot.set_title("Baseline model coefficients")
     baseline_coefficient_plot
+    return
 
 
 @app.cell(hide_code=True)
@@ -491,6 +499,7 @@ def _():
 
     Candidate job-accessibility variables are screened with a lightweight multinomial-logit fit before the selected candidate is estimated with Biogeme.
     """)
+    return
 
 
 @app.cell
@@ -634,6 +643,7 @@ def _(job_covariate_screen_comparison):
         ],
     ].copy()
     job_covariate_screen_display
+    return
 
 
 @app.cell
@@ -654,6 +664,7 @@ def _(job_covariate_screen_comparison):
     job_covariate_aic_plot.set_ylabel("")
     job_covariate_aic_plot.set_title("Job covariate screen")
     job_covariate_aic_plot
+    return
 
 
 @app.cell
@@ -673,6 +684,7 @@ def _(job_covariate_screen_comparison):
     job_covariate_coefficient_plot.set_ylabel("")
     job_covariate_coefficient_plot.set_title("Job coefficient signs")
     job_covariate_coefficient_plot
+    return
 
 
 @app.cell
@@ -692,6 +704,7 @@ def _(job_covariate_screen_comparison):
         .reset_index(drop=True)
     )
     job_covariate_diagnostics_summary
+    return
 
 
 @app.cell
@@ -717,6 +730,7 @@ def _(
         ]
     )
     job_covariate_sign_summary
+    return
 
 
 @app.cell(hide_code=True)
@@ -726,6 +740,7 @@ def _():
 
     The best job covariate from the screen replaces the all-job accessibility feature in the final Biogeme specification.
     """)
+    return
 
 
 @app.cell
@@ -819,6 +834,7 @@ def _():
 
     These tables and plots compare model fit, coefficient estimates, feature diagnostics, and observed versus predicted choice shares.
     """)
+    return
 
 
 @app.cell
@@ -886,6 +902,7 @@ def _(
     )
 
     best_model_comparison, best_coefficient_summary, best_feature_vif
+    return
 
 
 @app.cell
@@ -906,6 +923,7 @@ def _(best_estimated_parameters):
     best_coefficient_plot.set_ylabel("")
     best_coefficient_plot.set_title("Best model coefficients")
     best_coefficient_plot
+    return
 
 
 @app.cell
@@ -973,6 +991,7 @@ def _(best_choice_share_summary):
     best_choice_share_plot.set_ylabel("")
     best_choice_share_plot.set_title("Observed vs predicted shares, top neighborhoods")
     best_choice_share_plot
+    return
 
 
 if __name__ == "__main__":
