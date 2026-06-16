@@ -28,7 +28,6 @@ def _():
     from scipy.special import logsumexp
 
     warnings.filterwarnings("ignore", category=FutureWarning)
-
     return (
         BIOGEME,
         Beta,
@@ -76,7 +75,6 @@ def _(Path):
     TARGET_SCALE_LOWER = 1.0
     TARGET_SCALE_UPPER = 10.0
     MISSING_VALUE_SENTINEL = 99999
-
     return (
         BIOGEME_MODEL_PREFIX,
         FINALIST_COUNT,
@@ -868,7 +866,6 @@ def _(NEIGHBORHOOD_FEATURES_PATH, TRANSACTIONS_PATH, gpd, pd):
         ]
     )
     input_summary
-
     return df_neighborhood_raw, df_transactions_raw
 
 
@@ -885,7 +882,6 @@ def _(df_transactions_raw, pd):
         .reset_index(name="transactions")
     )
     transaction_year_counts_raw
-
     return (transaction_year_counts_raw,)
 
 
@@ -902,7 +898,6 @@ def _(transaction_year_counts_raw):
     transaction_year_plot.set_ylabel("Transactions")
     transaction_year_plot.set_title("Transactions by year")
     transaction_year_plot
-
     return
 
 
@@ -927,7 +922,6 @@ def _(build_feature_catalog, df_neighborhood_raw):
         .sort_values(["family", "role", "eligible"])
     )
     feature_catalog_summary
-
     return (feature_catalog,)
 
 
@@ -947,7 +941,6 @@ def _(feature_catalog):
         ],
     ]
     feature_catalog_display
-
     return
 
 
@@ -996,7 +989,6 @@ def _(df_neighborhood_raw, feature_catalog, pd, prepare_neighborhood_features):
         ]
     )
     prepared_feature_summary
-
     return (
         base_control_cols,
         built_area_cols,
@@ -1018,7 +1010,6 @@ def _(
         prepared_neighborhood_features, model_ready_feature_cols
     )
     scale_audit
-
     return (scale_audit,)
 
 
@@ -1032,7 +1023,6 @@ def _(scale_audit):
         .reset_index(name="features")
     )
     scale_warning_summary
-
     return
 
 
@@ -1094,7 +1084,6 @@ def _(
         ]
     )
     choice_set_summary
-
     return (
         choice_neighborhood_features,
         df_transactions_model,
@@ -1113,7 +1102,6 @@ def _(df_transactions_model):
         .reset_index(name="transactions")
     )
     model_transaction_year_counts
-
     return
 
 
@@ -1135,7 +1123,6 @@ def _(transaction_count_by_neighborhood):
         "Top neighborhoods by transactions"
     )
     top_neighborhood_transaction_counts_plot
-
     return
 
 
@@ -1191,7 +1178,6 @@ def _(
         ]
     )
     model_spec_summary
-
     return model_spec_summary, model_specs
 
 
@@ -1235,7 +1221,6 @@ def _(
     )
     spec_vif_detail = pd.concat(_spec_vif_frames, ignore_index=True)
     spec_diagnostics_summary
-
     return
 
 
@@ -1299,7 +1284,6 @@ def _(
         }
     )
     screening_comparison
-
     return screening_coefficients, screening_comparison
 
 
@@ -1318,7 +1302,6 @@ def _(screening_comparison):
         ],
     ].head(12)
     screening_top_table
-
     return
 
 
@@ -1341,7 +1324,6 @@ def _(screening_comparison):
     screening_aic_plot.set_ylabel("")
     screening_aic_plot.set_title("Fast-screened candidate specs")
     screening_aic_plot
-
     return
 
 
@@ -1368,7 +1350,6 @@ def _(model_spec_summary, screening_coefficients):
     screening_candidate_coefficient_plot.set_ylabel("")
     screening_candidate_coefficient_plot.set_title("Candidate coefficient signs")
     screening_candidate_coefficient_plot
-
     return
 
 
@@ -1407,7 +1388,6 @@ def _(FINALIST_COUNT, model_spec_summary, model_specs, screening_comparison):
         columns="finalist_order"
     )
     finalist_table
-
     return (finalist_specs,)
 
 
@@ -1457,7 +1437,6 @@ def _(
         {"final_log_likelihood": 3, "aic": 3, "bic": 3}
     )
     biogeme_model_comparison
-
     return biogeme_artifacts, biogeme_model_comparison
 
 
@@ -1486,7 +1465,6 @@ def _(biogeme_artifacts, biogeme_model_comparison, model_specs, pd):
         ]
     ).round({"aic": 3, "bic": 3, "final_log_likelihood": 3})
     selected_spec_summary
-
     return (
         selected_artifact,
         selected_estimated_parameters,
@@ -1499,7 +1477,6 @@ def _(run_derivative_check, selected_artifact):
 
     selected_derivative_check = run_derivative_check(selected_artifact)
     selected_derivative_check
-
     return (selected_derivative_check,)
 
 
@@ -1521,7 +1498,6 @@ def _(BIOGEME_MODEL_PREFIX, pd, selected_derivative_check):
         ]
     )
     biogeme_guardrail_summary
-
     return
 
 
@@ -1549,7 +1525,6 @@ def _(selected_estimated_parameters):
         .sort_values("feature")
     )
     selected_coefficient_summary
-
     return
 
 
@@ -1569,7 +1544,6 @@ def _(selected_estimated_parameters):
     selected_coefficient_plot.set_ylabel("")
     selected_coefficient_plot.set_title("Selected Biogeme coefficients")
     selected_coefficient_plot
-
     return
 
 
@@ -1596,7 +1570,6 @@ def _(
         selected_max_abs_correlation,
     ) = compute_feature_diagnostics(selected_diagnostics_frame)
     selected_feature_vif
-
     return (selected_feature_correlation,)
 
 
@@ -1618,7 +1591,6 @@ def _(plt, selected_feature_correlation, sns):
     selected_correlation_heatmap_axis.set_title("Selected spec feature correlation")
     selected_correlation_heatmap_figure.tight_layout()
     selected_correlation_heatmap_figure
-
     return
 
 
@@ -1645,7 +1617,6 @@ def _(
         }
     )
     selected_choice_share_summary.head(15)
-
     return (selected_choice_share_summary,)
 
 
@@ -1664,7 +1635,6 @@ def _(selected_choice_share_summary):
     choice_share_plot_axis.set_ylabel("")
     choice_share_plot_axis.set_title("Observed vs predicted shares")
     choice_share_plot_axis
-
     return
 
 
