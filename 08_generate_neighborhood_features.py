@@ -33,6 +33,28 @@ with app.setup:
     ee.Initialize()
 
 
+@app.cell(hide_code=True)
+def md_overview():
+    mo.md("""
+    # Neighborhood feature build
+
+    This notebook is the source of truth for neighborhood-level modeling features. It builds two canonical artifacts: `data/processed/col_final.gpkg`, which contains one row per neighborhood geometry with all derived features, and `data/processed/transactions_final.parquet`, which contains home purchases restricted to neighborhoods retained for analysis.
+
+    The notebook is organized as a data pipeline. Each section adds one feature family or prepares an external input, and the final export cell assembles the canonical neighborhood table.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def md_setup():
+    mo.md("""
+    ## Runtime setup
+
+    Imports, environment-derived paths, service clients, and database connections are defined first. These cells should stay small and reusable because later feature sections depend on them.
+    """)
+    return
+
+
 @app.cell
 def _():
     data_path = Path(os.environ["DATA_PATH"])
@@ -64,6 +86,16 @@ def _():
     return (engine,)
 
 
+@app.cell(hide_code=True)
+def md_neighborhood_geometry():
+    mo.md("""
+    ## Neighborhood geometry normalization
+
+    The source neighborhood layer contains naming inconsistencies and several geometries that need to be merged or relabeled before analysis. The helper cells below normalize names, apply manual geometry corrections, filter to neighborhoods observed in transactions, and project the result to `EPSG:6372` for metric spatial operations.
+    """)
+    return
+
+
 @app.function
 def clean_fracc_col(col: pd.Series) -> pd.Series:
     return (
@@ -75,6 +107,16 @@ def clean_fracc_col(col: pd.Series) -> pd.Series:
         .str.replace("desarrollo urbano", "")
         .str.strip()
     )
+
+
+@app.cell(hide_code=True)
+def md_transactions_input():
+    mo.md("""
+    ## Transaction input
+
+    The transaction workbook is cleaned into a consistent tabular source. Neighborhood names in this table define the residential universe used later: geometries are filtered to addresses that appear in the transaction data, and the final transaction export is restricted to those retained neighborhoods.
+    """)
+    return
 
 
 @app.cell
@@ -295,6 +337,16 @@ def _(data_path, df_transactions: pd.DataFrame):
     return (df_col,)
 
 
+@app.cell(hide_code=True)
+def md_mfg_features():
+    mo.md("""
+    ## Manufacturing cluster features
+
+    This section derives neighborhood exposure to manufacturing employment clusters from DENUE establishments. These features now belong directly in `col_final.gpkg`, so downstream notebooks can treat that geopackage as the only neighborhood-feature source.
+    """)
+    return
+
+
 @app.cell
 def mfg_denue_points(df_col, engine):
     mfg_xmin, mfg_ymin, mfg_xmax, mfg_ymax = df_col.buffer(10_000).total_bounds
@@ -347,6 +399,16 @@ def mfg_denue_points(df_col, engine):
 
     mfg_points_summary
     return mfg_points, mfg_xmax, mfg_xmin, mfg_ymax, mfg_ymin
+
+
+@app.cell(hide_code=True)
+def md_mfg_denue():
+    mo.md("""
+    ### DENUE establishments and 250m grid
+
+    Manufacturing establishments are selected with SCIAN activity codes beginning with `31`, `32`, or `33`. The query uses a buffered neighborhood bounding box, maps DENUE employment-size categories to representative worker counts, and aggregates jobs and business counts onto a 250 meter grid.
+    """)
+    return
 
 
 @app.cell
@@ -448,6 +510,16 @@ def mfg_spatial_weights(mfg_grid, mfg_grid_n_cols, mfg_grid_n_rows):
         mfg_weights,
         mfg_weights_binary,
     )
+
+
+@app.cell(hide_code=True)
+def md_mfg_hotspots():
+    mo.md("""
+    ### Spatial hotspot detection
+
+    The grid is analyzed with queen-style neighboring cells, global and local Moran statistics, and Getis-Ord Gi*. Candidate hotspot cells are those with significant Gi* evidence and either direct manufacturing employment or local high-high support.
+    """)
+    return
 
 
 @app.cell
@@ -663,6 +735,16 @@ def mfg_hotspot_clusters(
     return mfg_clusters, mfg_hotspot_cells
 
 
+@app.cell(hide_code=True)
+def md_mfg_clusters():
+    mo.md("""
+    ### Clusters and neighborhood exposure
+
+    Adjacent hotspot cells are dissolved into ranked manufacturing clusters. Neighborhood features summarize proximity, overlap, jobs within distance bands, and gravity-style exposure to those clusters.
+    """)
+    return
+
+
 @app.cell
 def mfg_neighborhood_features(df_col, mfg_clusters):
     _mfg_neighborhood_base = (
@@ -857,6 +939,16 @@ def mfg_neighborhood_features(df_col, mfg_clusters):
     )
 
 
+@app.cell(hide_code=True)
+def md_mfg_diagnostics():
+    mo.md("""
+    ### Manufacturing diagnostics
+
+    Diagnostic layers are exported separately for maps and sanity checks. These layers are not the canonical neighborhood-feature source; the neighborhood-level manufacturing columns are joined into `df_final` and written to `col_final.gpkg`.
+    """)
+    return
+
+
 @app.cell
 def mfg_diagnostics_export(mfg_clusters, mfg_hotspot_cells, mfg_hotspot_grid):
     mfg_spatial_diagnostics_output_path = Path(
@@ -891,6 +983,16 @@ def mfg_diagnostics_export(mfg_clusters, mfg_hotspot_cells, mfg_hotspot_grid):
     return (mfg_spatial_diagnostics_output_path,)
 
 
+@app.cell(hide_code=True)
+def md_accessibility():
+    mo.md("""
+    ## Accessibility features
+
+    Accessibility features summarize access to jobs and parks/services using the Lyra routing service and project helper functions. Cached cells are intentionally used here because these service calls are expensive and deterministic for a fixed input geometry set.
+    """)
+    return
+
+
 @app.cell
 def _(client, df_col):
     with mo.persistent_cache("accessibility_jobs"):
@@ -915,6 +1017,16 @@ def _(client, data_path, df_col):
         accessibility_max_weight=1000,
     )["accessibility_all"]
     return (accessibility_services,)
+
+
+@app.cell(hide_code=True)
+def md_travel_times():
+    mo.md("""
+    ## Travel-time anchors
+
+    These cells compute travel times from each neighborhood to major reference points: the metropolitan center and the east/west border crossings. The OSMnx road graph is built around the neighborhood extent, then shortest paths are evaluated from neighborhood centroids to each anchor.
+    """)
+    return
 
 
 @app.cell
@@ -1002,6 +1114,16 @@ def _(cent, col_nodes, g, nodes):
     return (df_travel_times,)
 
 
+@app.cell(hide_code=True)
+def md_built_area():
+    mo.md("""
+    ## Built-area history
+
+    Google Dynamic World built-surface estimates are reduced over each neighborhood for 2020 through 2025. These columns capture recent physical development intensity and are joined into the final neighborhood feature table.
+    """)
+    return
+
+
 @app.cell
 def _(df_col):
     features = geemap.geopandas_to_ee(
@@ -1043,6 +1165,16 @@ def _(bbox, features):
     return (df_areas,)
 
 
+@app.cell(hide_code=True)
+def md_final_export():
+    mo.md("""
+    ## Canonical neighborhood export
+
+    The final neighborhood table combines cleaned geometries, accessibility features, travel times, built-area history, and manufacturing-cluster exposure. This section writes `col_final.gpkg`, which should be the only source used by later notebooks for neighborhood-level features.
+    """)
+    return
+
+
 @app.cell
 def _(df_accessibility_jobs):
     unwanted_cols_jobs = [
@@ -1075,6 +1207,16 @@ def _(
 
     df_final.to_file("./data/processed/col_final.gpkg")
     return (df_final,)
+
+
+@app.cell(hide_code=True)
+def md_validation():
+    mo.md("""
+    ## Export validation
+
+    The validation cell checks row counts, uniqueness, manufacturing feature presence, distance sanity, monotonic distance-band totals, diagnostics output, and removal of the legacy manufacturing sidecar. It is meant to make the feature-export contract visible before downstream analysis notebooks consume the outputs.
+    """)
+    return
 
 
 @app.cell
@@ -1159,6 +1301,16 @@ def mfg_feature_validation(
     )
 
     mfg_feature_export_validation
+    return
+
+
+@app.cell(hide_code=True)
+def md_transactions_export():
+    mo.md("""
+    ## Transaction export
+
+    The final transaction artifact keeps only purchases whose address matches a retained neighborhood. This preserves alignment between purchase records and the canonical neighborhood feature table.
+    """)
     return
 
 
