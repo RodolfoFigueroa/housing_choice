@@ -23,11 +23,15 @@ from housing_choice.modeling.features import (
     nice_scale_denominator,
     prepare_neighborhood_features,
 )
-from housing_choice.modeling.specs import build_single_candidate_model_specs
+from housing_choice.modeling.specs import (
+    build_combination_model_specs,
+    build_single_candidate_model_specs,
+)
 
 __all__ = [
     "align_choice_data",
     "build_choice_dataframe",
+    "build_combination_model_specs",
     "build_feature_catalog",
     "build_feature_diagnostics_frame",
     "build_single_candidate_model_specs",

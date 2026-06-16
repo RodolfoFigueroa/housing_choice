@@ -476,8 +476,9 @@ def _(
         _spec_diag_rows.append(
             {
                 "spec_id": _spec_id,
-                "family": _spec["family"],
-                "candidate_feature": _spec["candidate_feature"],
+                "spec_kind": _spec["spec_kind"],
+                "candidate_families": _spec["candidate_families"],
+                "candidate_features": _spec["candidate_features"],
                 "max_abs_correlation": _max_corr,
                 "max_vif": float(_vif["vif"].max()),
             }
@@ -526,8 +527,9 @@ def _(
         _screen_rows.append(
             _row
             | {
-                "family": _spec["family"],
-                "candidate_feature": _spec["candidate_feature"],
+                "spec_kind": _spec["spec_kind"],
+                "candidate_families": _spec["candidate_families"],
+                "candidate_features": _spec["candidate_features"],
             }
         )
         _screen_coef_frames.append(_coef_frame)
@@ -563,8 +565,9 @@ def _(screening_comparison):
         :,
         [
             "spec_id",
-            "family",
-            "candidate_feature",
+            "spec_kind",
+            "candidate_families",
+            "candidate_features",
             "aic",
             "delta_aic_vs_baseline",
             "screen_converged",
@@ -601,11 +604,13 @@ def _(model_spec_summary, screening_coefficients):
 
     screening_candidate_coefficients = (
         screening_coefficients.merge(
-            model_spec_summary.loc[:, ["spec_id", "candidate_feature", "family"]],
+            model_spec_summary.loc[
+                :, ["spec_id", "candidate_features", "candidate_families"]
+            ].explode(["candidate_features", "candidate_families"]),
             on="spec_id",
             how="left",
         )
-        .loc[lambda df: df["feature"].eq(df["candidate_feature"])]
+        .loc[lambda df: df["feature"].eq(df["candidate_features"])]
         .sort_values("screen_coef")
     )
     screening_candidate_coefficient_plot = screening_candidate_coefficients.plot.barh(
@@ -694,8 +699,9 @@ def _(FINALIST_COUNT, model_spec_summary, model_specs, screening_comparison):
         [
             "finalist_role",
             "spec_id",
-            "family",
-            "candidate_feature",
+            "spec_kind",
+            "candidate_families",
+            "candidate_features",
             "screen_aic",
             "screen_delta_aic_vs_baseline",
             "screen_converged",
@@ -742,7 +748,9 @@ def _(
             [artifact["summary_row"] for artifact in biogeme_artifacts.values()]
         )
         .merge(
-            model_spec_summary.loc[:, ["spec_id", "family", "candidate_feature"]],
+            model_spec_summary.loc[
+                :, ["spec_id", "spec_kind", "candidate_families", "candidate_features"]
+            ],
             on="spec_id",
             how="left",
         )
@@ -778,8 +786,13 @@ def _(biogeme_artifacts, biogeme_model_comparison, model_specs):
         [
             {
                 "selected_spec_id": selected_spec_id,
-                "candidate_feature": model_specs[selected_spec_id]["candidate_feature"],
-                "family": model_specs[selected_spec_id]["family"],
+                "candidate_features": model_specs[selected_spec_id][
+                    "candidate_features"
+                ],
+                "candidate_families": model_specs[selected_spec_id][
+                    "candidate_families"
+                ],
+                "spec_kind": model_specs[selected_spec_id]["spec_kind"],
                 "aic": selected_results.akaike_information_criterion,
                 "bic": selected_results.bayesian_information_criterion,
                 "final_log_likelihood": selected_results.final_log_likelihood,

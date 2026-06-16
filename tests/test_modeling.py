@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest import TestCase
 
 import geopandas as gpd
@@ -7,9 +8,13 @@ import numpy as np
 import pandas as pd
 import shapely
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 from housing_choice.modeling import (
     align_choice_data,
     build_choice_dataframe,
+    build_combination_model_specs,
     build_feature_catalog,
     build_feature_diagnostics_frame,
     build_single_candidate_model_specs,
@@ -47,6 +52,14 @@ def sample_neighborhoods() -> gpd.GeoDataFrame:
         geometry=[shapely.Point(0, 0), shapely.Point(1, 1)],
         crs="EPSG:6372",
     )
+
+
+def value_error_message(callback: Callable[[], object]) -> str:
+    try:
+        callback()
+    except ValueError as exc:
+        return str(exc)
+    return ""
 
 
 class ModelingTest(TestCase):
@@ -109,7 +122,7 @@ class ModelingTest(TestCase):
         assert choice_frame.loc[0, "log_built_area_ha_0"] == 0.0
         assert choice_frame.loc[1, "log_built_area_ha_0"] == np.log1p(1.0)
 
-    def test_single_candidate_specs_match_current_notebook_contract(self) -> None:
+    def test_single_candidate_specs_use_list_based_metadata(self) -> None:
         model_specs, summary = build_single_candidate_model_specs(
             ["control_a", "control_b"],
             ["job_a"],
@@ -127,19 +140,100 @@ class ModelingTest(TestCase):
             "control_a",
             "control_b",
         ]
+        assert model_specs["baseline_no_jobs"]["spec_kind"] == "baseline"
+        assert model_specs["baseline_no_jobs"]["candidate_features"] == []
         assert model_specs["job__job_a"]["static_cols"] == [
             "job_a",
             "control_a",
             "control_b",
         ]
-        assert (
-            summary.loc[
-                summary["spec_id"].eq("job__job_a"),
-                "all_features",
-            ]
-            .iloc[0]
-            .endswith("log_built_area_ha")
+        assert model_specs["job__job_a"]["spec_kind"] == "single_candidate"
+        assert model_specs["job__job_a"]["candidate_features"] == ["job_a"]
+        assert model_specs["job__job_a"]["candidate_families"] == [
+            "job_accessibility",
+        ]
+        job_summary = summary.loc[summary["spec_id"].eq("job__job_a")].iloc[0]
+        assert job_summary["candidate_count"] == 1
+        assert job_summary["candidate_features"] == ["job_a"]
+        assert job_summary["all_features"].endswith("log_built_area_ha")
+
+    def test_combination_specs_generate_two_and_three_way_candidates(self) -> None:
+        model_specs, summary = build_combination_model_specs(
+            ["control_a", "control_b"],
+            {
+                "job_accessibility": ["job_a", "job_b"],
+                "manufacturing_cluster": ["mfg_a"],
+                "logistics_cluster": ["logistics_a"],
+            },
         )
+
+        assert list(model_specs) == [
+            "combo__job_a__mfg_a",
+            "combo__job_b__mfg_a",
+            "combo__job_a__logistics_a",
+            "combo__job_b__logistics_a",
+            "combo__mfg_a__logistics_a",
+            "combo__job_a__mfg_a__logistics_a",
+            "combo__job_b__mfg_a__logistics_a",
+        ]
+        assert "baseline_no_jobs" not in model_specs
+        assert model_specs["combo__job_a__mfg_a"]["static_cols"] == [
+            "job_a",
+            "mfg_a",
+            "control_a",
+            "control_b",
+        ]
+        assert model_specs["combo__job_a__mfg_a"]["candidate_families"] == [
+            "job_accessibility",
+            "manufacturing_cluster",
+        ]
+        combo_summary = summary.loc[
+            summary["spec_id"].eq("combo__job_a__mfg_a__logistics_a")
+        ].iloc[0]
+        assert combo_summary["spec_kind"] == "combination"
+        assert combo_summary["candidate_count"] == 3
+        assert combo_summary["candidate_features"] == [
+            "job_a",
+            "mfg_a",
+            "logistics_a",
+        ]
+        assert combo_summary["all_features"].endswith("log_built_area_ha")
+
+    def test_combination_specs_reject_ambiguous_inputs(self) -> None:
+        message = value_error_message(
+            lambda: build_combination_model_specs(
+                ["control_a"],
+                {"job_accessibility": ["shared"], "logistics_cluster": ["shared"]},
+            ),
+        )
+        assert "candidate features must be unique" in message
+
+        message = value_error_message(
+            lambda: build_combination_model_specs(
+                ["control_a"],
+                {"job_accessibility": ["control_a"], "logistics_cluster": ["log_a"]},
+            ),
+        )
+        assert "overlap with base controls" in message
+
+        message = value_error_message(
+            lambda: build_combination_model_specs(
+                ["control_a"],
+                {"job_accessibility": ["job_a"], "logistics_cluster": ["log_a"]},
+                min_candidates=1,
+            ),
+        )
+        assert "min_candidates must be at least 2" in message
+
+        message = value_error_message(
+            lambda: build_combination_model_specs(
+                ["control_a"],
+                {"job_accessibility": ["job_a"], "logistics_cluster": ["log_a"]},
+                min_candidates=3,
+                max_candidates=2,
+            ),
+        )
+        assert "greater than or equal" in message
 
     def test_diagnostics_validation_and_fast_screen_are_finite(self) -> None:
         neighborhood_features = pd.DataFrame(
