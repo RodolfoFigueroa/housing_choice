@@ -3,42 +3,30 @@ import marimo
 __generated_with = "0.23.9"
 app = marimo.App(width="medium")
 
+with app.setup:
+    import math
+    import os
+    import warnings
+    from pathlib import Path
+    from typing import cast
 
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md("""
-    # Toy Jobs + Supply Choice Model
-
-    A small Biogeme multinomial logit baseline for neighborhood choice. The main model uses automatically filtered decayed job-accessibility covariates plus transaction-year built area as a supply proxy; the jobs-only model is kept as a quick sensitivity check.
-    """)
-    return
-
-
-@app.cell
-def _():
-    import math  # noqa: PLC0415
-    import os  # noqa: PLC0415
-    import warnings  # noqa: PLC0415
-    from pathlib import Path  # noqa: PLC0415
-    from typing import cast  # noqa: PLC0415
-
-    import biogeme.database as db  # noqa: PLC0415
-    import geopandas as gpd  # noqa: PLC0415
-    import marimo as mo  # noqa: PLC0415
-    import matplotlib.pyplot as plt  # noqa: PLC0415
-    import numpy as np  # noqa: PLC0415
-    import pandas as pd  # noqa: PLC0415
-    import seaborn as sns  # noqa: PLC0415
-    from biogeme import models  # noqa: PLC0415
-    from biogeme.biogeme import BIOGEME  # noqa: PLC0415
-    from biogeme.expressions import Beta, Variable  # noqa: PLC0415
-    from biogeme.parameters import Parameters  # noqa: PLC0415
-    from biogeme.results_processing import (  # noqa: PLC0415
+    import biogeme.database as db
+    import geopandas as gpd
+    import marimo as mo
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import pandas as pd
+    import seaborn as sns
+    from biogeme import models
+    from biogeme.biogeme import BIOGEME
+    from biogeme.expressions import Beta, Variable
+    from biogeme.parameters import Parameters
+    from biogeme.results_processing import (
         get_pandas_estimated_parameters,
     )
-    from scipy.special import logsumexp  # noqa: PLC0415
+    from scipy.special import logsumexp
 
-    from housing_choice.modeling import (  # noqa: PLC0415
+    from housing_choice.modeling import (
         align_choice_data,
         build_feature_catalog,
         build_feature_diagnostics_frame,
@@ -52,40 +40,20 @@ def _():
     )
 
     warnings.filterwarnings("ignore", category=FutureWarning)
-    return (
-        BIOGEME,
-        Beta,
-        Parameters,
-        Path,
-        Variable,
-        align_choice_data,
-        build_feature_catalog,
-        build_feature_diagnostics_frame,
-        cast,
-        compute_feature_diagnostics,
-        compute_scale_audit,
-        db,
-        get_pandas_estimated_parameters,
-        gpd,
-        logsumexp,
-        math,
-        mo,
-        models,
-        nice_scale_denominator,
-        np,
-        os,
-        pd,
-        plt,
-        prepare_neighborhood_features,
-        prepare_transactions,
-        safe_identifier,
-        sns,
-        validate_choice_dataframe,
-    )
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.md("""
+    # Toy Jobs + Supply Choice Model
+
+    A small Biogeme multinomial logit baseline for neighborhood choice. The main model uses automatically filtered decayed job-accessibility covariates plus transaction-year built area as a supply proxy; the jobs-only model is kept as a quick sensitivity check.
+    """)
+    return
 
 
 @app.cell
-def _(Path, os):
+def _():
     GENERATED_PATH = Path(os.environ["DATA_PATH"]) / "generated"
     NEIGHBORHOOD_FEATURES_PATH = GENERATED_PATH / "col_final.gpkg"
     TRANSACTIONS_PATH = GENERATED_PATH / "transactions_final.parquet"
@@ -143,7 +111,7 @@ def _(Path, os):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md("""
     ## Inputs
 
@@ -153,7 +121,7 @@ def _(mo):
 
 
 @app.cell
-def _(NEIGHBORHOOD_FEATURES_PATH, TRANSACTIONS_PATH, gpd, pd):
+def _(NEIGHBORHOOD_FEATURES_PATH, TRANSACTIONS_PATH):
     df_neighborhood_raw = gpd.read_file(NEIGHBORHOOD_FEATURES_PATH)
     df_transactions_raw = pd.read_parquet(TRANSACTIONS_PATH)
 
@@ -178,15 +146,7 @@ def _(NEIGHBORHOOD_FEATURES_PATH, TRANSACTIONS_PATH, gpd, pd):
 
 
 @app.cell
-def _(
-    DECAY_WEIGHT,
-    JOB_SECTORS,
-    build_feature_catalog,
-    df_neighborhood_raw,
-    nice_scale_denominator,
-    pd,
-    prepare_neighborhood_features,
-):
+def _(DECAY_WEIGHT, JOB_SECTORS, df_neighborhood_raw):
     feature_catalog = build_feature_catalog(df_neighborhood_raw)
     prepared_neighborhood_features = prepare_neighborhood_features(
         df_neighborhood_raw,
@@ -289,11 +249,7 @@ def _(
 
 
 @app.cell
-def _(
-    CANDIDATE_JOB_FEATURE_COLS,
-    compute_scale_audit,
-    prepared_neighborhood_features,
-):
+def _(CANDIDATE_JOB_FEATURE_COLS, prepared_neighborhood_features):
     toy_candidate_scale_audit = compute_scale_audit(
         prepared_neighborhood_features,
         CANDIDATE_JOB_FEATURE_COLS,
@@ -307,11 +263,8 @@ def _(
     MODELING_YEAR_MAX,
     MODELING_YEAR_MIN,
     TRANSACTION_THRESH,
-    align_choice_data,
     df_neighborhood_raw,
     df_transactions_raw,
-    pd,
-    prepare_transactions,
     prepared_neighborhood_features,
 ):
     (
@@ -366,7 +319,7 @@ def _(df_transactions_toy):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md("""
     ## Covariate Screening
 
@@ -375,160 +328,155 @@ def _(mo):
     return
 
 
-@app.cell
-def _(build_feature_diagnostics_frame, compute_feature_diagnostics, np, pd):
-    def filter_redundant_job_covariates(
-        feature_frame: pd.DataFrame,
-        transactions: pd.DataFrame,
-        candidate_cols: list[str],
-        priority_cols: list[str],
-        built_area_cols: list[str],
-        *,
-        correlation_threshold: float,
-        vif_threshold: float,
-    ) -> tuple[list[str], pd.DataFrame]:
-        priority_rank = {feature: rank for rank, feature in enumerate(priority_cols)}
-        ordered_candidates = sorted(
-            candidate_cols,
-            key=lambda feature: priority_rank.get(feature, len(priority_rank)),
-        )
-        drop_rows = []
-        valid_candidates = []
-        for feature in ordered_candidates:
-            if feature not in feature_frame.columns:
-                drop_rows.append(
-                    {
-                        "feature": feature,
-                        "stage": "validity",
-                        "reason": "missing_feature",
-                        "conflicting_feature": "",
-                        "correlation": np.nan,
-                        "vif": np.nan,
-                        "threshold": np.nan,
-                    }
-                )
-                continue
-            values = pd.to_numeric(feature_frame[feature], errors="coerce")
-            finite_values = values.replace([np.inf, -np.inf], np.nan).dropna()
-            if len(finite_values) != len(values):
-                drop_rows.append(
-                    {
-                        "feature": feature,
-                        "stage": "validity",
-                        "reason": "non_finite_or_missing",
-                        "conflicting_feature": "",
-                        "correlation": np.nan,
-                        "vif": np.nan,
-                        "threshold": np.nan,
-                    }
-                )
-                continue
-            if finite_values.eq(finite_values.iloc[0]).all():
-                drop_rows.append(
-                    {
-                        "feature": feature,
-                        "stage": "validity",
-                        "reason": "zero_variance",
-                        "conflicting_feature": "",
-                        "correlation": np.nan,
-                        "vif": np.nan,
-                        "threshold": np.nan,
-                    }
-                )
-                continue
-            valid_candidates.append(feature)
-
-        retained = []
-        correlation = feature_frame.loc[:, valid_candidates].astype(float).corr()
-        for feature in valid_candidates:
-            conflicting_pairs = [
-                (
-                    retained_feature,
-                    abs(float(correlation.loc[feature, retained_feature])),
-                )
-                for retained_feature in retained
-                if abs(float(correlation.loc[feature, retained_feature]))
-                >= correlation_threshold
-            ]
-            if conflicting_pairs:
-                conflicting_feature, correlation_value = max(
-                    conflicting_pairs,
-                    key=lambda pair: pair[1],
-                )
-                drop_rows.append(
-                    {
-                        "feature": feature,
-                        "stage": "pairwise_correlation",
-                        "reason": "high_pairwise_correlation",
-                        "conflicting_feature": conflicting_feature,
-                        "correlation": correlation_value,
-                        "vif": np.nan,
-                        "threshold": correlation_threshold,
-                    }
-                )
-                continue
-            retained.append(feature)
-
-        while len(retained) > 1:
-            diagnostics_frame = build_feature_diagnostics_frame(
-                feature_frame,
-                transactions,
-                retained,
-                built_area_cols,
+@app.function
+def filter_redundant_job_covariates(
+    feature_frame: pd.DataFrame,
+    transactions: pd.DataFrame,
+    candidate_cols: list[str],
+    priority_cols: list[str],
+    built_area_cols: list[str],
+    *,
+    correlation_threshold: float,
+    vif_threshold: float,
+) -> tuple[list[str], pd.DataFrame]:
+    priority_rank = {feature: rank for rank, feature in enumerate(priority_cols)}
+    ordered_candidates = sorted(
+        candidate_cols,
+        key=lambda feature: priority_rank.get(feature, len(priority_rank)),
+    )
+    drop_rows = []
+    valid_candidates = []
+    for feature in ordered_candidates:
+        if feature not in feature_frame.columns:
+            drop_rows.append(
+                {
+                    "feature": feature,
+                    "stage": "validity",
+                    "reason": "missing_feature",
+                    "conflicting_feature": "",
+                    "correlation": np.nan,
+                    "vif": np.nan,
+                    "threshold": np.nan,
+                }
             )
-            _, _, vif, _ = compute_feature_diagnostics(diagnostics_frame)
-            vif_candidates = vif.loc[lambda df: df["feature"].isin(retained)].copy()
-            max_vif = float(vif_candidates["vif"].max())
-            if max_vif <= vif_threshold:
-                break
-            max_vif_candidates = vif_candidates.loc[
-                vif_candidates["vif"].eq(max_vif)
-            ].copy()
-            max_vif_candidates = max_vif_candidates.assign(
-                priority_rank=lambda df: df["feature"].map(priority_rank).fillna(9999)
+            continue
+        values = pd.to_numeric(feature_frame[feature], errors="coerce")
+        finite_values = values.replace([np.inf, -np.inf], np.nan).dropna()
+        if len(finite_values) != len(values):
+            drop_rows.append(
+                {
+                    "feature": feature,
+                    "stage": "validity",
+                    "reason": "non_finite_or_missing",
+                    "conflicting_feature": "",
+                    "correlation": np.nan,
+                    "vif": np.nan,
+                    "threshold": np.nan,
+                }
             )
-            feature_to_drop = str(
-                max_vif_candidates.sort_values(
-                    ["priority_rank", "feature"],
-                    ascending=[False, True],
-                ).iloc[0]["feature"]
+            continue
+        if finite_values.eq(finite_values.iloc[0]).all():
+            drop_rows.append(
+                {
+                    "feature": feature,
+                    "stage": "validity",
+                    "reason": "zero_variance",
+                    "conflicting_feature": "",
+                    "correlation": np.nan,
+                    "vif": np.nan,
+                    "threshold": np.nan,
+                }
+            )
+            continue
+        valid_candidates.append(feature)
+
+    retained = []
+    correlation = feature_frame.loc[:, valid_candidates].astype(float).corr()
+    for feature in valid_candidates:
+        conflicting_pairs = [
+            (
+                retained_feature,
+                abs(float(correlation.loc[feature, retained_feature])),
+            )
+            for retained_feature in retained
+            if abs(float(correlation.loc[feature, retained_feature]))
+            >= correlation_threshold
+        ]
+        if conflicting_pairs:
+            conflicting_feature, correlation_value = max(
+                conflicting_pairs,
+                key=lambda pair: pair[1],
             )
             drop_rows.append(
                 {
-                    "feature": feature_to_drop,
-                    "stage": "vif",
-                    "reason": "high_vif",
-                    "conflicting_feature": "",
-                    "correlation": np.nan,
-                    "vif": max_vif,
-                    "threshold": vif_threshold,
+                    "feature": feature,
+                    "stage": "pairwise_correlation",
+                    "reason": "high_pairwise_correlation",
+                    "conflicting_feature": conflicting_feature,
+                    "correlation": correlation_value,
+                    "vif": np.nan,
+                    "threshold": correlation_threshold,
                 }
             )
-            retained.remove(feature_to_drop)
+            continue
+        retained.append(feature)
 
-        screening_report = pd.DataFrame(
-            drop_rows,
-            columns=[
-                "feature",
-                "stage",
-                "reason",
-                "conflicting_feature",
-                "correlation",
-                "vif",
-                "threshold",
-            ],
+    while len(retained) > 1:
+        diagnostics_frame = build_feature_diagnostics_frame(
+            feature_frame,
+            transactions,
+            retained,
+            built_area_cols,
         )
-        return retained, screening_report
+        _, _, vif, _ = compute_feature_diagnostics(diagnostics_frame)
+        vif_candidates = vif.loc[lambda df: df["feature"].isin(retained)].copy()
+        max_vif = float(vif_candidates["vif"].max())
+        if max_vif <= vif_threshold:
+            break
+        max_vif_candidates = vif_candidates.loc[
+            vif_candidates["vif"].eq(max_vif)
+        ].copy()
+        max_vif_candidates = max_vif_candidates.assign(
+            priority_rank=lambda df: df["feature"].map(priority_rank).fillna(9999)
+        )
+        feature_to_drop = str(
+            max_vif_candidates.sort_values(
+                ["priority_rank", "feature"],
+                ascending=[False, True],
+            ).iloc[0]["feature"]
+        )
+        drop_rows.append(
+            {
+                "feature": feature_to_drop,
+                "stage": "vif",
+                "reason": "high_vif",
+                "conflicting_feature": "",
+                "correlation": np.nan,
+                "vif": max_vif,
+                "threshold": vif_threshold,
+            }
+        )
+        retained.remove(feature_to_drop)
 
-    return (filter_redundant_job_covariates,)
+    screening_report = pd.DataFrame(
+        drop_rows,
+        columns=[
+            "feature",
+            "stage",
+            "reason",
+            "conflicting_feature",
+            "correlation",
+            "vif",
+            "threshold",
+        ],
+    )
+    return retained, screening_report
 
 
 @app.cell
 def _(
     CANDIDATE_JOB_FEATURE_COLS,
-    build_feature_diagnostics_frame,
     choice_neighborhood_features,
-    compute_feature_diagnostics,
     df_transactions_toy,
     toy_built_area_cols,
 ):
@@ -549,7 +497,7 @@ def _(
 
 
 @app.cell
-def _(plt, sns, toy_candidate_feature_correlation):
+def _(toy_candidate_feature_correlation):
     toy_candidate_correlation_heatmap_figure, toy_candidate_correlation_heatmap_axis = (
         plt.subplots(figsize=(8, 6))
     )
@@ -573,8 +521,6 @@ def _(plt, sns, toy_candidate_feature_correlation):
 @app.cell(hide_code=True)
 def _(
     DECAY_WEIGHT,
-    mo,
-    np,
     toy_candidate_feature_correlation,
     toy_candidate_feature_vif,
 ):
@@ -601,8 +547,6 @@ def _(
     VIF_THRESHOLD,
     choice_neighborhood_features,
     df_transactions_toy,
-    filter_redundant_job_covariates,
-    pd,
     toy_built_area_cols,
 ):
     (
@@ -677,7 +621,7 @@ def _(FILTERED_JOB_FEATURE_COLS, toy_decayed_feature_build_report):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md("""
     ## Local Toy Model Helpers
 
@@ -687,7 +631,7 @@ def _(mo):
 
 
 @app.cell
-def _(Parameters, np, pd):
+def _():
     def make_toy_biogeme_parameters() -> Parameters:
         params = Parameters()
         for name, value in {
@@ -769,20 +713,10 @@ def _(Parameters, np, pd):
 
 @app.cell
 def _(
-    BIOGEME,
-    Beta,
     MISSING_VALUE_SENTINEL,
     TOY_MODEL_PREFIX,
-    Variable,
     build_toy_choice_dataframe,
-    db,
-    get_pandas_estimated_parameters,
     make_toy_biogeme_parameters,
-    math,
-    models,
-    pd,
-    safe_identifier,
-    validate_choice_dataframe,
 ):
     def fit_toy_biogeme_model(
         spec_id: str,
@@ -885,66 +819,63 @@ def _(
     return (fit_toy_biogeme_model,)
 
 
-@app.cell
-def _(cast, logsumexp, np, pd):
-    def predict_toy_choice_shares(
-        artifact: dict[str, object],
-        neighborhood_features: pd.DataFrame,
-        transactions: pd.DataFrame,
-        built_area_cols: list[str],
-    ) -> pd.DataFrame:
-        estimated_parameters = cast(pd.DataFrame, artifact["estimated_parameters"])
-        params = estimated_parameters.set_index("feature")["Value"].to_dict()
-        static_cols = cast(list[str], artifact["static_cols"])
-        include_built_area = bool(artifact["include_built_area"])
-        static_utility = neighborhood_features.loc[:, static_cols].astype(
-            float
-        ).to_numpy() @ np.array([params[col] for col in static_cols])
+@app.function
+def predict_toy_choice_shares(
+    artifact: dict[str, object],
+    neighborhood_features: pd.DataFrame,
+    transactions: pd.DataFrame,
+    built_area_cols: list[str],
+) -> pd.DataFrame:
+    estimated_parameters = cast("pd.DataFrame", artifact["estimated_parameters"])
+    params = estimated_parameters.set_index("feature")["Value"].to_dict()
+    static_cols = cast("list[str]", artifact["static_cols"])
+    include_built_area = bool(artifact["include_built_area"])
+    static_utility = neighborhood_features.loc[:, static_cols].astype(
+        float
+    ).to_numpy() @ np.array([params[col] for col in static_cols])
 
-        year_to_log_built_area = {}
+    year_to_log_built_area = {}
+    if include_built_area:
+        year_to_log_built_area = {
+            int(col.rsplit("_", maxsplit=1)[1]): np.log1p(
+                neighborhood_features[col].astype(float).to_numpy() / 10_000
+            )
+            for col in built_area_cols
+        }
+        built_beta = params["log_built_area_ha"]
+    else:
+        built_beta = 0.0
+
+    probabilities = []
+    for year in transactions["purchase_year"].astype(int):
+        utility = static_utility.copy()
         if include_built_area:
-            year_to_log_built_area = {
-                int(col.rsplit("_", maxsplit=1)[1]): np.log1p(
-                    neighborhood_features[col].astype(float).to_numpy() / 10_000
-                )
-                for col in built_area_cols
-            }
-            built_beta = params["log_built_area_ha"]
-        else:
-            built_beta = 0.0
+            utility = utility + built_beta * year_to_log_built_area[int(year)]
+        probability = np.exp(utility - logsumexp(utility))
+        probabilities.append(probability)
 
-        probabilities = []
-        for year in transactions["purchase_year"].astype(int):
-            utility = static_utility.copy()
-            if include_built_area:
-                utility = utility + built_beta * year_to_log_built_area[int(year)]
-            probability = np.exp(utility - logsumexp(utility))
-            probabilities.append(probability)
-
-        predicted_share = np.vstack(probabilities).mean(axis=0)
-        observed_share = (
-            transactions["neighborhood_idx"]
-            .value_counts(normalize=True)
-            .reindex(neighborhood_features.index, fill_value=0)
-            .sort_index()
-            .to_numpy()
-        )
-        return pd.DataFrame(
-            {
-                "neighborhood_idx": neighborhood_features.index,
-                "neighborhood": neighborhood_features["name_detail"].to_numpy(),
-                "observed_share": observed_share,
-                "predicted_share": predicted_share,
-                "share_error": predicted_share - observed_share,
-                "abs_share_error": np.abs(predicted_share - observed_share),
-            }
-        ).sort_values("observed_share", ascending=False)
-
-    return (predict_toy_choice_shares,)
+    predicted_share = np.vstack(probabilities).mean(axis=0)
+    observed_share = (
+        transactions["neighborhood_idx"]
+        .value_counts(normalize=True)
+        .reindex(neighborhood_features.index, fill_value=0)
+        .sort_index()
+        .to_numpy()
+    )
+    return pd.DataFrame(
+        {
+            "neighborhood_idx": neighborhood_features.index,
+            "neighborhood": neighborhood_features["name_detail"].to_numpy(),
+            "observed_share": observed_share,
+            "predicted_share": predicted_share,
+            "share_error": predicted_share - observed_share,
+            "abs_share_error": np.abs(predicted_share - observed_share),
+        }
+    ).sort_values("observed_share", ascending=False)
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md("""
     ## Biogeme Fits
 
@@ -961,7 +892,6 @@ def _(
     choice_neighborhood_features,
     df_transactions_toy,
     fit_toy_biogeme_model,
-    pd,
     toy_built_area_cols,
 ):
     toy_model_specs = {
@@ -1020,7 +950,7 @@ def _(
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md("""
     ## Model Fit Reports
 
@@ -1030,14 +960,14 @@ def _(mo):
 
 
 @app.cell
-def _(cast, np, pd, toy_model_artifacts, toy_model_specs):
+def _(toy_model_artifacts, toy_model_specs):
     toy_general_stat_rows = []
     toy_optimizer_rows = []
     toy_fit_rows = []
 
     for _spec_id, _artifact in toy_model_artifacts.items():
         _results = _artifact["results"]
-        _summary = cast(dict[str, object], _artifact["summary_row"])
+        _summary = cast("dict[str, object]", _artifact["summary_row"])
         _description = str(toy_model_specs[_spec_id]["description"])
         _general_stats = _results.get_general_statistics()
         _raw_results = getattr(_results, "raw_estimation_results", None)
@@ -1279,7 +1209,7 @@ def _(MAIN_SPEC_ID, toy_model_artifacts):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md("""
     ## Final Model Fit Statistics
 
@@ -1406,7 +1336,7 @@ def _(toy_final_model_fit_summary):
 
 
 @app.cell
-def _(pd, toy_model_artifacts):
+def _(toy_model_artifacts):
     toy_sensitivity_coefficient_summary = (
         pd.concat(
             [
@@ -1429,7 +1359,7 @@ def _(pd, toy_model_artifacts):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md("""
     ## Diagnostics
     """)
@@ -1446,9 +1376,7 @@ def _(toy_main_artifact):
 @app.cell
 def _(
     MAIN_SPEC_ID,
-    build_feature_diagnostics_frame,
     choice_neighborhood_features,
-    compute_feature_diagnostics,
     df_transactions_toy,
     toy_built_area_cols,
     toy_model_specs,
@@ -1470,7 +1398,7 @@ def _(
 
 
 @app.cell
-def _(plt, sns, toy_main_feature_correlation):
+def _(toy_main_feature_correlation):
     toy_correlation_heatmap_figure, toy_correlation_heatmap_axis = plt.subplots(
         figsize=(7, 5)
     )
@@ -1492,7 +1420,7 @@ def _(plt, sns, toy_main_feature_correlation):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md("""
     ## Prediction Checks
     """)
@@ -1503,9 +1431,6 @@ def _(mo):
 def _(
     choice_neighborhood_features,
     df_transactions_toy,
-    np,
-    pd,
-    predict_toy_choice_shares,
     toy_built_area_cols,
     toy_main_artifact,
 ):
