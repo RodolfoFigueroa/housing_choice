@@ -15,16 +15,50 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 
-CATALOG_COLUMNS = [
+SOURCE_CATALOG_COLUMNS = [
     "source_column",
     "model_column",
     "family",
-    "role",
     "transform",
     "scale_denominator",
-    "eligible",
     "reason",
 ]
+
+FEATURE_DESCRIPTION_BY_REASON = {
+    "identifier or geometry": "identifier or geometry",
+    "binary access control": "binary access feature",
+    "candidate job accessibility": "job accessibility feature",
+    "zero variance": "zero variance in generated feature artifact",
+    "service accessibility control": "service accessibility feature",
+    "centrality control": "travel-time feature to city center",
+    "raw crossing helper": (
+        "raw travel-time feature used to derive nearest crossing time"
+    ),
+    "dynamic supply proxy": "built-area history feature",
+    "selected interpretable cluster exposure": (
+        "cluster exposure feature with prepared representation"
+    ),
+    "kept out to avoid over-specified cluster models": (
+        "available raw cluster exposure feature"
+    ),
+    "unclassified": "available raw feature not classified into a documented family",
+    "nearest border crossing control": (
+        "derived nearest border-crossing travel-time feature"
+    ),
+}
+
+FEATURE_DERIVATION_BY_TRANSFORM = {
+    "not a model covariate": "identifier or geometry",
+    "not used in v1 model specs": "available raw feature; no prepared representation",
+    "not classified for modelling": "available raw feature; no prepared representation",
+}
+
+SECTOR_THRESHOLD_COLUMN_NAMES = {
+    "hotspot_candidate_cells": "hotspot_cells_before_cluster_threshold",
+    "selected_clusters": "clusters_passing_threshold",
+    "selected_cluster_jobs": "jobs_in_clusters_passing_threshold",
+    "selected_cluster_businesses": "businesses_in_clusters_passing_threshold",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -146,6 +180,54 @@ def artifact_summary(data_path: Path) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def feature_description(reason: object) -> str:
+    return FEATURE_DESCRIPTION_BY_REASON.get(str(reason), str(reason))
+
+
+def feature_derivation(transform: object) -> str:
+    return FEATURE_DERIVATION_BY_TRANSFORM.get(str(transform), str(transform))
+
+
+def build_documentation_catalog(feature_catalog: pd.DataFrame) -> pd.DataFrame:
+    return (
+        feature_catalog.assign(
+            prepared_column=lambda df: df["model_column"],
+            feature_derivation=lambda df: df["transform"].map(
+                feature_derivation,
+            ),
+            feature_description=lambda df: df["reason"].map(feature_description),
+        )
+        .loc[
+            :,
+            [
+                "source_column",
+                "prepared_column",
+                "family",
+                "feature_derivation",
+                "scale_denominator",
+                "feature_description",
+            ],
+        ]
+        .sort_values(["family", "source_column"])
+    )
+
+
+def build_documentation_summary(documentation_catalog: pd.DataFrame) -> pd.DataFrame:
+    return (
+        documentation_catalog.groupby(
+            ["family", "feature_description"],
+            dropna=False,
+        )
+        .size()
+        .reset_index(name="columns")
+        .sort_values(["family", "feature_description"])
+    )
+
+
+def neutralize_sector_thresholds(sector_thresholds: pd.DataFrame) -> pd.DataFrame:
+    return sector_thresholds.rename(columns=SECTOR_THRESHOLD_COLUMN_NAMES)
+
+
 def build_feature_catalog_document(data_path: Path) -> str:
     generated_path = data_path / "generated"
     neighborhood_features_path = generated_path / "col_final.gpkg"
@@ -155,21 +237,18 @@ def build_feature_catalog_document(data_path: Path) -> str:
 
     neighborhood_raw = gpd.read_file(neighborhood_features_path)
     feature_catalog = build_feature_catalog(neighborhood_raw)
-    feature_catalog = feature_catalog.loc[:, CATALOG_COLUMNS].sort_values(
-        ["family", "role", "source_column"],
+    feature_catalog = feature_catalog.loc[:, SOURCE_CATALOG_COLUMNS]
+    documentation_catalog = build_documentation_catalog(feature_catalog)
+    feature_summary = build_documentation_summary(documentation_catalog)
+
+    sector_thresholds = read_optional_parquet(
+        generated_path / "sector_cluster_threshold_audit.parquet",
     )
-    feature_summary = (
-        feature_catalog.groupby(["family", "role", "eligible"], dropna=False)
-        .size()
-        .reset_index(name="columns")
-        .sort_values(["family", "role", "eligible"])
-    )
+    if sector_thresholds is not None:
+        sector_thresholds = neutralize_sector_thresholds(sector_thresholds)
 
     sector_config = read_optional_parquet(
         generated_path / "sector_cluster_config_summary.parquet",
-    )
-    sector_thresholds = read_optional_parquet(
-        generated_path / "sector_cluster_threshold_audit.parquet",
     )
 
     parts = [
@@ -189,7 +268,7 @@ def build_feature_catalog_document(data_path: Path) -> str:
         markdown_table(feature_summary, data_path=data_path),
         "## Feature Catalog",
         "",
-        markdown_table(feature_catalog, data_path=data_path),
+        markdown_table(documentation_catalog, data_path=data_path),
     ]
 
     if sector_config is not None:

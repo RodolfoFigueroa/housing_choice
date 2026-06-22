@@ -15,331 +15,332 @@ Paths in generated tables are relative to `DATA_PATH` unless otherwise noted.
 
 ## Feature Family Summary
 
-| family | role | eligible | columns |
-| --- | --- | --- | --- |
-| access | control | True | 1 |
-| built_area_history | transaction_varying | True | 6 |
-| identifier | exclude | False | 3 |
-| job_accessibility | exclude | False | 2 |
-| job_accessibility | job_screen | True | 16 |
-| logistics_cluster | available_not_screened | False | 28 |
-| logistics_cluster | logistics_screen | True | 3 |
-| manufacturing_cluster | available_not_screened | False | 28 |
-| manufacturing_cluster | mfg_screen | True | 3 |
-| other | exclude | False | 210 |
-| service_accessibility | control | True | 1 |
-| travel_time | control | True | 2 |
-| travel_time | helper | False | 2 |
+| family | feature_description | columns |
+| --- | --- | --- |
+| access | binary access feature | 1 |
+| built_area_history | built-area history feature | 6 |
+| identifier | identifier or geometry | 3 |
+| job_accessibility | job accessibility feature | 16 |
+| job_accessibility | zero variance in generated feature artifact | 2 |
+| logistics_cluster | available raw cluster exposure feature | 28 |
+| logistics_cluster | cluster exposure feature with prepared representation | 3 |
+| manufacturing_cluster | available raw cluster exposure feature | 28 |
+| manufacturing_cluster | cluster exposure feature with prepared representation | 3 |
+| other | available raw feature not classified into a documented family | 210 |
+| service_accessibility | service accessibility feature | 1 |
+| travel_time | derived nearest border-crossing travel-time feature | 1 |
+| travel_time | raw travel-time feature used to derive nearest crossing time | 2 |
+| travel_time | travel-time feature to city center | 1 |
 
 ## Feature Catalog
 
-| source_column | model_column | family | role | transform | scale_denominator | eligible | reason |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| access | access_is_restricted | access | control | LIBRE=0, RESTRINGIDO=1 | 1 | True | binary access control |
-| built_area_2020 | log_built_area_ha | built_area_history | transaction_varying | log1p(area_m2 / 10000) by purchase year |  | True | dynamic supply proxy |
-| built_area_2021 | log_built_area_ha | built_area_history | transaction_varying | log1p(area_m2 / 10000) by purchase year |  | True | dynamic supply proxy |
-| built_area_2022 | log_built_area_ha | built_area_history | transaction_varying | log1p(area_m2 / 10000) by purchase year |  | True | dynamic supply proxy |
-| built_area_2023 | log_built_area_ha | built_area_history | transaction_varying | log1p(area_m2 / 10000) by purchase year |  | True | dynamic supply proxy |
-| built_area_2024 | log_built_area_ha | built_area_history | transaction_varying | log1p(area_m2 / 10000) by purchase year |  | True | dynamic supply proxy |
-| built_area_2025 | log_built_area_ha | built_area_history | transaction_varying | log1p(area_m2 / 10000) by purchase year |  | True | dynamic supply proxy |
-| geometry |  | identifier | exclude | not a model covariate |  | False | identifier or geometry |
-| name |  | identifier | exclude | not a model covariate |  | False | identifier or geometry |
-| name_detail |  | identifier | exclude | not a model covariate |  | False | identifier or geometry |
-| jobs_public_admin_10_2025 | jobs_public_admin_10_2025_scaled | job_accessibility | exclude | zero variance |  | False | zero variance |
-| jobs_public_admin_20_2025 | jobs_public_admin_20_2025_scaled | job_accessibility | exclude | zero variance |  | False | zero variance |
-| jobs_all_10_2025 | jobs_all_10_2025_scaled | job_accessibility | job_screen | divide by 20000 jobs | 20000 | True | candidate job accessibility |
-| jobs_all_20_2025 | jobs_all_20_2025_scaled | job_accessibility | job_screen | divide by 50000 jobs | 50000 | True | candidate job accessibility |
-| jobs_business_services_10_2025 | jobs_business_services_10_2025_scaled | job_accessibility | job_screen | divide by 2000 jobs | 2000 | True | candidate job accessibility |
-| jobs_business_services_20_2025 | jobs_business_services_20_2025_scaled | job_accessibility | job_screen | divide by 5000 jobs | 5000 | True | candidate job accessibility |
-| jobs_care_education_health_10_2025 | jobs_care_education_health_10_2025_scaled | job_accessibility | job_screen | divide by 5000 jobs | 5000 | True | candidate job accessibility |
-| jobs_care_education_health_20_2025 | jobs_care_education_health_20_2025_scaled | job_accessibility | job_screen | divide by 5000 jobs | 5000 | True | candidate job accessibility |
-| jobs_commerce_10_2025 | jobs_commerce_10_2025_scaled | job_accessibility | job_screen | divide by 5000 jobs | 5000 | True | candidate job accessibility |
-| jobs_commerce_20_2025 | jobs_commerce_20_2025_scaled | job_accessibility | job_screen | divide by 10000 jobs | 10000 | True | candidate job accessibility |
-| jobs_construction_10_2025 | jobs_construction_10_2025_scaled | job_accessibility | job_screen | divide by 500 jobs | 500 | True | candidate job accessibility |
-| jobs_construction_20_2025 | jobs_construction_20_2025_scaled | job_accessibility | job_screen | divide by 1000 jobs | 1000 | True | candidate job accessibility |
-| jobs_local_services_10_2025 | jobs_local_services_10_2025_scaled | job_accessibility | job_screen | divide by 5000 jobs | 5000 | True | candidate job accessibility |
-| jobs_local_services_20_2025 | jobs_local_services_20_2025_scaled | job_accessibility | job_screen | divide by 10000 jobs | 10000 | True | candidate job accessibility |
-| jobs_logistics_10_2025 | jobs_logistics_10_2025_scaled | job_accessibility | job_screen | divide by 1000 jobs | 1000 | True | candidate job accessibility |
-| jobs_logistics_20_2025 | jobs_logistics_20_2025_scaled | job_accessibility | job_screen | divide by 2000 jobs | 2000 | True | candidate job accessibility |
-| jobs_manufacture_10_2025 | jobs_manufacture_10_2025_scaled | job_accessibility | job_screen | divide by 5000 jobs | 5000 | True | candidate job accessibility |
-| jobs_manufacture_20_2025 | jobs_manufacture_20_2025_scaled | job_accessibility | job_screen | divide by 10000 jobs | 10000 | True | candidate job accessibility |
-| distance_to_logistics_cluster_boundary_m |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| distance_to_logistics_cluster_centroid_m |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| intersects_logistics_cluster |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| log_logistics_cluster_gravity_exp_2km |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| logistics_cluster_gravity_exp_2km |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| logistics_cluster_gravity_inv_sq |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| logistics_clusters_within_1km |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| logistics_clusters_within_2km |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| logistics_clusters_within_500m |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| logistics_clusters_within_5km |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| logistics_distance_nearest_cluster_centroid_km |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| logistics_jobs_within_1km |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| logistics_jobs_within_2km |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| logistics_jobs_within_500m |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| logistics_jobs_within_5km |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| logistics_largest_cluster_jobs_within_1km |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| logistics_largest_cluster_jobs_within_2km |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| logistics_largest_cluster_jobs_within_500m |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| logistics_largest_cluster_jobs_within_5km |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| nearest_logistics_cluster_area_km2 |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| nearest_logistics_cluster_businesses |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| nearest_logistics_cluster_id |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| nearest_logistics_cluster_jobs |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| nearest_logistics_cluster_jobs_per_km2 |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| nearest_logistics_cluster_rank |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| within_1km_of_logistics_cluster |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| within_2km_of_logistics_cluster |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| within_500m_of_logistics_cluster |  | logistics_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| log_logistics_cluster_gravity_inv_sq | log_logistics_cluster_gravity_inv_sq | logistics_cluster | logistics_screen | already log scaled | 1 | True | selected interpretable cluster exposure |
-| log_logistics_jobs_within_2km | log_logistics_jobs_within_2km | logistics_cluster | logistics_screen | already log scaled | 1 | True | selected interpretable cluster exposure |
-| logistics_distance_nearest_cluster_km | logistics_distance_nearest_cluster_km_scaled | logistics_cluster | logistics_screen | divide by 1 km | 1 | True | selected interpretable cluster exposure |
-| distance_to_mfg_cluster_boundary_m |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| distance_to_mfg_cluster_centroid_m |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| intersects_mfg_cluster |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| log_mfg_cluster_gravity_exp_2km |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| mfg_cluster_gravity_exp_2km |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| mfg_cluster_gravity_inv_sq |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| mfg_clusters_within_1km |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| mfg_clusters_within_2km |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| mfg_clusters_within_500m |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| mfg_clusters_within_5km |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| mfg_distance_nearest_cluster_centroid_km |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| mfg_jobs_within_1km |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| mfg_jobs_within_2km |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| mfg_jobs_within_500m |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| mfg_jobs_within_5km |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| mfg_largest_cluster_jobs_within_1km |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| mfg_largest_cluster_jobs_within_2km |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| mfg_largest_cluster_jobs_within_500m |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| mfg_largest_cluster_jobs_within_5km |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| nearest_mfg_cluster_area_km2 |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| nearest_mfg_cluster_businesses |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| nearest_mfg_cluster_id |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| nearest_mfg_cluster_jobs |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| nearest_mfg_cluster_jobs_per_km2 |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| nearest_mfg_cluster_rank |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| within_1km_of_mfg_cluster |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| within_2km_of_mfg_cluster |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| within_500m_of_mfg_cluster |  | manufacturing_cluster | available_not_screened | not used in v1 model specs |  | False | kept out to avoid over-specified cluster models |
-| log_mfg_cluster_gravity_inv_sq | log_mfg_cluster_gravity_inv_sq | manufacturing_cluster | mfg_screen | already log scaled | 1 | True | selected interpretable cluster exposure |
-| log_mfg_jobs_within_2km | log_mfg_jobs_within_2km | manufacturing_cluster | mfg_screen | already log scaled | 1 | True | selected interpretable cluster exposure |
-| mfg_distance_nearest_cluster_km | mfg_distance_nearest_cluster_km_scaled | manufacturing_cluster | mfg_screen | divide by 0.5 km | 0.5 | True | selected interpretable cluster exposure |
-| business_services_cluster_gravity_exp_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| business_services_cluster_gravity_inv_sq |  | other | exclude | not classified for modelling |  | False | unclassified |
-| business_services_clusters_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| business_services_clusters_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| business_services_clusters_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| business_services_clusters_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| business_services_distance_nearest_cluster_centroid_km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| business_services_distance_nearest_cluster_km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| business_services_jobs_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| business_services_jobs_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| business_services_jobs_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| business_services_jobs_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| business_services_largest_cluster_jobs_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| business_services_largest_cluster_jobs_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| business_services_largest_cluster_jobs_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| business_services_largest_cluster_jobs_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| care_education_health_cluster_gravity_exp_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| care_education_health_cluster_gravity_inv_sq |  | other | exclude | not classified for modelling |  | False | unclassified |
-| care_education_health_clusters_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| care_education_health_clusters_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| care_education_health_clusters_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| care_education_health_clusters_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| care_education_health_distance_nearest_cluster_centroid_km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| care_education_health_distance_nearest_cluster_km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| care_education_health_jobs_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| care_education_health_jobs_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| care_education_health_jobs_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| care_education_health_jobs_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| care_education_health_largest_cluster_jobs_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| care_education_health_largest_cluster_jobs_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| care_education_health_largest_cluster_jobs_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| care_education_health_largest_cluster_jobs_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| commerce_cluster_gravity_exp_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| commerce_cluster_gravity_inv_sq |  | other | exclude | not classified for modelling |  | False | unclassified |
-| commerce_clusters_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| commerce_clusters_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| commerce_clusters_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| commerce_clusters_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| commerce_distance_nearest_cluster_centroid_km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| commerce_distance_nearest_cluster_km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| commerce_jobs_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| commerce_jobs_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| commerce_jobs_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| commerce_jobs_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| commerce_largest_cluster_jobs_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| commerce_largest_cluster_jobs_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| commerce_largest_cluster_jobs_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| commerce_largest_cluster_jobs_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| construction_cluster_gravity_exp_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| construction_cluster_gravity_inv_sq |  | other | exclude | not classified for modelling |  | False | unclassified |
-| construction_clusters_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| construction_clusters_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| construction_clusters_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| construction_clusters_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| construction_distance_nearest_cluster_centroid_km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| construction_distance_nearest_cluster_km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| construction_jobs_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| construction_jobs_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| construction_jobs_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| construction_jobs_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| construction_largest_cluster_jobs_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| construction_largest_cluster_jobs_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| construction_largest_cluster_jobs_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| construction_largest_cluster_jobs_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| distance_to_business_services_cluster_boundary_m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| distance_to_business_services_cluster_centroid_m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| distance_to_care_education_health_cluster_boundary_m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| distance_to_care_education_health_cluster_centroid_m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| distance_to_commerce_cluster_boundary_m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| distance_to_commerce_cluster_centroid_m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| distance_to_construction_cluster_boundary_m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| distance_to_construction_cluster_centroid_m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| distance_to_local_services_cluster_boundary_m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| distance_to_local_services_cluster_centroid_m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| distance_to_public_admin_cluster_boundary_m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| distance_to_public_admin_cluster_centroid_m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| intersects_business_services_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| intersects_care_education_health_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| intersects_commerce_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| intersects_construction_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| intersects_local_services_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| intersects_public_admin_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| local_services_cluster_gravity_exp_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| local_services_cluster_gravity_inv_sq |  | other | exclude | not classified for modelling |  | False | unclassified |
-| local_services_clusters_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| local_services_clusters_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| local_services_clusters_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| local_services_clusters_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| local_services_distance_nearest_cluster_centroid_km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| local_services_distance_nearest_cluster_km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| local_services_jobs_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| local_services_jobs_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| local_services_jobs_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| local_services_jobs_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| local_services_largest_cluster_jobs_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| local_services_largest_cluster_jobs_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| local_services_largest_cluster_jobs_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| local_services_largest_cluster_jobs_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_business_services_cluster_gravity_exp_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_business_services_cluster_gravity_inv_sq |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_business_services_jobs_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_business_services_jobs_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_business_services_jobs_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_business_services_jobs_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_care_education_health_cluster_gravity_exp_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_care_education_health_cluster_gravity_inv_sq |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_care_education_health_jobs_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_care_education_health_jobs_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_care_education_health_jobs_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_care_education_health_jobs_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_commerce_cluster_gravity_exp_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_commerce_cluster_gravity_inv_sq |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_commerce_jobs_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_commerce_jobs_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_commerce_jobs_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_commerce_jobs_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_construction_cluster_gravity_exp_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_construction_cluster_gravity_inv_sq |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_construction_jobs_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_construction_jobs_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_construction_jobs_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_construction_jobs_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_local_services_cluster_gravity_exp_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_local_services_cluster_gravity_inv_sq |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_local_services_jobs_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_local_services_jobs_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_local_services_jobs_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_local_services_jobs_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_logistics_jobs_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_logistics_jobs_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_logistics_jobs_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_mfg_jobs_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_mfg_jobs_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_mfg_jobs_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_public_admin_cluster_gravity_exp_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_public_admin_cluster_gravity_inv_sq |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_public_admin_jobs_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_public_admin_jobs_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_public_admin_jobs_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| log_public_admin_jobs_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_business_services_cluster_area_km2 |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_business_services_cluster_businesses |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_business_services_cluster_id |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_business_services_cluster_jobs |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_business_services_cluster_jobs_per_km2 |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_business_services_cluster_rank |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_care_education_health_cluster_area_km2 |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_care_education_health_cluster_businesses |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_care_education_health_cluster_id |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_care_education_health_cluster_jobs |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_care_education_health_cluster_jobs_per_km2 |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_care_education_health_cluster_rank |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_commerce_cluster_area_km2 |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_commerce_cluster_businesses |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_commerce_cluster_id |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_commerce_cluster_jobs |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_commerce_cluster_jobs_per_km2 |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_commerce_cluster_rank |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_construction_cluster_area_km2 |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_construction_cluster_businesses |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_construction_cluster_id |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_construction_cluster_jobs |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_construction_cluster_jobs_per_km2 |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_construction_cluster_rank |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_local_services_cluster_area_km2 |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_local_services_cluster_businesses |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_local_services_cluster_id |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_local_services_cluster_jobs |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_local_services_cluster_jobs_per_km2 |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_local_services_cluster_rank |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_public_admin_cluster_area_km2 |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_public_admin_cluster_businesses |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_public_admin_cluster_id |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_public_admin_cluster_jobs |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_public_admin_cluster_jobs_per_km2 |  | other | exclude | not classified for modelling |  | False | unclassified |
-| nearest_public_admin_cluster_rank |  | other | exclude | not classified for modelling |  | False | unclassified |
-| public_admin_cluster_gravity_exp_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| public_admin_cluster_gravity_inv_sq |  | other | exclude | not classified for modelling |  | False | unclassified |
-| public_admin_clusters_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| public_admin_clusters_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| public_admin_clusters_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| public_admin_clusters_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| public_admin_distance_nearest_cluster_centroid_km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| public_admin_distance_nearest_cluster_km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| public_admin_jobs_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| public_admin_jobs_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| public_admin_jobs_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| public_admin_jobs_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| public_admin_largest_cluster_jobs_within_1km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| public_admin_largest_cluster_jobs_within_2km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| public_admin_largest_cluster_jobs_within_500m |  | other | exclude | not classified for modelling |  | False | unclassified |
-| public_admin_largest_cluster_jobs_within_5km |  | other | exclude | not classified for modelling |  | False | unclassified |
-| within_1km_of_business_services_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| within_1km_of_care_education_health_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| within_1km_of_commerce_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| within_1km_of_construction_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| within_1km_of_local_services_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| within_1km_of_public_admin_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| within_2km_of_business_services_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| within_2km_of_care_education_health_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| within_2km_of_commerce_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| within_2km_of_construction_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| within_2km_of_local_services_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| within_2km_of_public_admin_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| within_500m_of_business_services_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| within_500m_of_care_education_health_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| within_500m_of_commerce_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| within_500m_of_construction_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| within_500m_of_local_services_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| within_500m_of_public_admin_cluster |  | other | exclude | not classified for modelling |  | False | unclassified |
-| accessibility_services | accessibility_services_scaled | service_accessibility | control | divide by 0.05 | 0.05 | True | service accessibility control |
-| min(travel_time_crossing_west, travel_time_crossing_east) | travel_time_nearest_crossing_scaled | travel_time | control | divide by 200 seconds | 200 | True | nearest border crossing control |
-| travel_time_city_center | travel_time_city_center_scaled | travel_time | control | divide by 200 seconds | 200 | True | centrality control |
-| travel_time_crossing_east |  | travel_time | helper | combined into nearest crossing time |  | False | raw crossing helper |
-| travel_time_crossing_west |  | travel_time | helper | combined into nearest crossing time |  | False | raw crossing helper |
+| source_column | prepared_column | family | feature_derivation | scale_denominator | feature_description |
+| --- | --- | --- | --- | --- | --- |
+| access | access_is_restricted | access | LIBRE=0, RESTRINGIDO=1 | 1 | binary access feature |
+| built_area_2020 | log_built_area_ha | built_area_history | log1p(area_m2 / 10000) by purchase year |  | built-area history feature |
+| built_area_2021 | log_built_area_ha | built_area_history | log1p(area_m2 / 10000) by purchase year |  | built-area history feature |
+| built_area_2022 | log_built_area_ha | built_area_history | log1p(area_m2 / 10000) by purchase year |  | built-area history feature |
+| built_area_2023 | log_built_area_ha | built_area_history | log1p(area_m2 / 10000) by purchase year |  | built-area history feature |
+| built_area_2024 | log_built_area_ha | built_area_history | log1p(area_m2 / 10000) by purchase year |  | built-area history feature |
+| built_area_2025 | log_built_area_ha | built_area_history | log1p(area_m2 / 10000) by purchase year |  | built-area history feature |
+| geometry |  | identifier | identifier or geometry |  | identifier or geometry |
+| name |  | identifier | identifier or geometry |  | identifier or geometry |
+| name_detail |  | identifier | identifier or geometry |  | identifier or geometry |
+| jobs_all_10_2025 | jobs_all_10_2025_scaled | job_accessibility | divide by 20000 jobs | 20000 | job accessibility feature |
+| jobs_all_20_2025 | jobs_all_20_2025_scaled | job_accessibility | divide by 50000 jobs | 50000 | job accessibility feature |
+| jobs_business_services_10_2025 | jobs_business_services_10_2025_scaled | job_accessibility | divide by 2000 jobs | 2000 | job accessibility feature |
+| jobs_business_services_20_2025 | jobs_business_services_20_2025_scaled | job_accessibility | divide by 5000 jobs | 5000 | job accessibility feature |
+| jobs_care_education_health_10_2025 | jobs_care_education_health_10_2025_scaled | job_accessibility | divide by 5000 jobs | 5000 | job accessibility feature |
+| jobs_care_education_health_20_2025 | jobs_care_education_health_20_2025_scaled | job_accessibility | divide by 5000 jobs | 5000 | job accessibility feature |
+| jobs_commerce_10_2025 | jobs_commerce_10_2025_scaled | job_accessibility | divide by 5000 jobs | 5000 | job accessibility feature |
+| jobs_commerce_20_2025 | jobs_commerce_20_2025_scaled | job_accessibility | divide by 10000 jobs | 10000 | job accessibility feature |
+| jobs_construction_10_2025 | jobs_construction_10_2025_scaled | job_accessibility | divide by 500 jobs | 500 | job accessibility feature |
+| jobs_construction_20_2025 | jobs_construction_20_2025_scaled | job_accessibility | divide by 1000 jobs | 1000 | job accessibility feature |
+| jobs_local_services_10_2025 | jobs_local_services_10_2025_scaled | job_accessibility | divide by 5000 jobs | 5000 | job accessibility feature |
+| jobs_local_services_20_2025 | jobs_local_services_20_2025_scaled | job_accessibility | divide by 10000 jobs | 10000 | job accessibility feature |
+| jobs_logistics_10_2025 | jobs_logistics_10_2025_scaled | job_accessibility | divide by 1000 jobs | 1000 | job accessibility feature |
+| jobs_logistics_20_2025 | jobs_logistics_20_2025_scaled | job_accessibility | divide by 2000 jobs | 2000 | job accessibility feature |
+| jobs_manufacture_10_2025 | jobs_manufacture_10_2025_scaled | job_accessibility | divide by 5000 jobs | 5000 | job accessibility feature |
+| jobs_manufacture_20_2025 | jobs_manufacture_20_2025_scaled | job_accessibility | divide by 10000 jobs | 10000 | job accessibility feature |
+| jobs_public_admin_10_2025 | jobs_public_admin_10_2025_scaled | job_accessibility | zero variance |  | zero variance in generated feature artifact |
+| jobs_public_admin_20_2025 | jobs_public_admin_20_2025_scaled | job_accessibility | zero variance |  | zero variance in generated feature artifact |
+| distance_to_logistics_cluster_boundary_m |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| distance_to_logistics_cluster_centroid_m |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| intersects_logistics_cluster |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| log_logistics_cluster_gravity_exp_2km |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| log_logistics_cluster_gravity_inv_sq | log_logistics_cluster_gravity_inv_sq | logistics_cluster | already log scaled | 1 | cluster exposure feature with prepared representation |
+| log_logistics_jobs_within_2km | log_logistics_jobs_within_2km | logistics_cluster | already log scaled | 1 | cluster exposure feature with prepared representation |
+| logistics_cluster_gravity_exp_2km |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| logistics_cluster_gravity_inv_sq |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| logistics_clusters_within_1km |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| logistics_clusters_within_2km |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| logistics_clusters_within_500m |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| logistics_clusters_within_5km |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| logistics_distance_nearest_cluster_centroid_km |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| logistics_distance_nearest_cluster_km | logistics_distance_nearest_cluster_km_scaled | logistics_cluster | divide by 1 km | 1 | cluster exposure feature with prepared representation |
+| logistics_jobs_within_1km |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| logistics_jobs_within_2km |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| logistics_jobs_within_500m |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| logistics_jobs_within_5km |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| logistics_largest_cluster_jobs_within_1km |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| logistics_largest_cluster_jobs_within_2km |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| logistics_largest_cluster_jobs_within_500m |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| logistics_largest_cluster_jobs_within_5km |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| nearest_logistics_cluster_area_km2 |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| nearest_logistics_cluster_businesses |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| nearest_logistics_cluster_id |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| nearest_logistics_cluster_jobs |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| nearest_logistics_cluster_jobs_per_km2 |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| nearest_logistics_cluster_rank |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| within_1km_of_logistics_cluster |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| within_2km_of_logistics_cluster |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| within_500m_of_logistics_cluster |  | logistics_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| distance_to_mfg_cluster_boundary_m |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| distance_to_mfg_cluster_centroid_m |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| intersects_mfg_cluster |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| log_mfg_cluster_gravity_exp_2km |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| log_mfg_cluster_gravity_inv_sq | log_mfg_cluster_gravity_inv_sq | manufacturing_cluster | already log scaled | 1 | cluster exposure feature with prepared representation |
+| log_mfg_jobs_within_2km | log_mfg_jobs_within_2km | manufacturing_cluster | already log scaled | 1 | cluster exposure feature with prepared representation |
+| mfg_cluster_gravity_exp_2km |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| mfg_cluster_gravity_inv_sq |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| mfg_clusters_within_1km |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| mfg_clusters_within_2km |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| mfg_clusters_within_500m |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| mfg_clusters_within_5km |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| mfg_distance_nearest_cluster_centroid_km |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| mfg_distance_nearest_cluster_km | mfg_distance_nearest_cluster_km_scaled | manufacturing_cluster | divide by 0.5 km | 0.5 | cluster exposure feature with prepared representation |
+| mfg_jobs_within_1km |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| mfg_jobs_within_2km |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| mfg_jobs_within_500m |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| mfg_jobs_within_5km |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| mfg_largest_cluster_jobs_within_1km |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| mfg_largest_cluster_jobs_within_2km |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| mfg_largest_cluster_jobs_within_500m |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| mfg_largest_cluster_jobs_within_5km |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| nearest_mfg_cluster_area_km2 |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| nearest_mfg_cluster_businesses |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| nearest_mfg_cluster_id |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| nearest_mfg_cluster_jobs |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| nearest_mfg_cluster_jobs_per_km2 |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| nearest_mfg_cluster_rank |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| within_1km_of_mfg_cluster |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| within_2km_of_mfg_cluster |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| within_500m_of_mfg_cluster |  | manufacturing_cluster | available raw feature; no prepared representation |  | available raw cluster exposure feature |
+| business_services_cluster_gravity_exp_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| business_services_cluster_gravity_inv_sq |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| business_services_clusters_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| business_services_clusters_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| business_services_clusters_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| business_services_clusters_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| business_services_distance_nearest_cluster_centroid_km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| business_services_distance_nearest_cluster_km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| business_services_jobs_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| business_services_jobs_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| business_services_jobs_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| business_services_jobs_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| business_services_largest_cluster_jobs_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| business_services_largest_cluster_jobs_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| business_services_largest_cluster_jobs_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| business_services_largest_cluster_jobs_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| care_education_health_cluster_gravity_exp_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| care_education_health_cluster_gravity_inv_sq |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| care_education_health_clusters_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| care_education_health_clusters_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| care_education_health_clusters_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| care_education_health_clusters_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| care_education_health_distance_nearest_cluster_centroid_km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| care_education_health_distance_nearest_cluster_km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| care_education_health_jobs_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| care_education_health_jobs_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| care_education_health_jobs_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| care_education_health_jobs_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| care_education_health_largest_cluster_jobs_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| care_education_health_largest_cluster_jobs_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| care_education_health_largest_cluster_jobs_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| care_education_health_largest_cluster_jobs_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| commerce_cluster_gravity_exp_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| commerce_cluster_gravity_inv_sq |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| commerce_clusters_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| commerce_clusters_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| commerce_clusters_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| commerce_clusters_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| commerce_distance_nearest_cluster_centroid_km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| commerce_distance_nearest_cluster_km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| commerce_jobs_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| commerce_jobs_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| commerce_jobs_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| commerce_jobs_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| commerce_largest_cluster_jobs_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| commerce_largest_cluster_jobs_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| commerce_largest_cluster_jobs_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| commerce_largest_cluster_jobs_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| construction_cluster_gravity_exp_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| construction_cluster_gravity_inv_sq |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| construction_clusters_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| construction_clusters_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| construction_clusters_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| construction_clusters_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| construction_distance_nearest_cluster_centroid_km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| construction_distance_nearest_cluster_km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| construction_jobs_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| construction_jobs_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| construction_jobs_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| construction_jobs_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| construction_largest_cluster_jobs_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| construction_largest_cluster_jobs_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| construction_largest_cluster_jobs_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| construction_largest_cluster_jobs_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| distance_to_business_services_cluster_boundary_m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| distance_to_business_services_cluster_centroid_m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| distance_to_care_education_health_cluster_boundary_m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| distance_to_care_education_health_cluster_centroid_m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| distance_to_commerce_cluster_boundary_m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| distance_to_commerce_cluster_centroid_m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| distance_to_construction_cluster_boundary_m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| distance_to_construction_cluster_centroid_m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| distance_to_local_services_cluster_boundary_m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| distance_to_local_services_cluster_centroid_m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| distance_to_public_admin_cluster_boundary_m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| distance_to_public_admin_cluster_centroid_m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| intersects_business_services_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| intersects_care_education_health_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| intersects_commerce_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| intersects_construction_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| intersects_local_services_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| intersects_public_admin_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| local_services_cluster_gravity_exp_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| local_services_cluster_gravity_inv_sq |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| local_services_clusters_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| local_services_clusters_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| local_services_clusters_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| local_services_clusters_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| local_services_distance_nearest_cluster_centroid_km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| local_services_distance_nearest_cluster_km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| local_services_jobs_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| local_services_jobs_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| local_services_jobs_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| local_services_jobs_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| local_services_largest_cluster_jobs_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| local_services_largest_cluster_jobs_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| local_services_largest_cluster_jobs_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| local_services_largest_cluster_jobs_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_business_services_cluster_gravity_exp_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_business_services_cluster_gravity_inv_sq |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_business_services_jobs_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_business_services_jobs_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_business_services_jobs_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_business_services_jobs_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_care_education_health_cluster_gravity_exp_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_care_education_health_cluster_gravity_inv_sq |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_care_education_health_jobs_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_care_education_health_jobs_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_care_education_health_jobs_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_care_education_health_jobs_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_commerce_cluster_gravity_exp_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_commerce_cluster_gravity_inv_sq |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_commerce_jobs_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_commerce_jobs_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_commerce_jobs_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_commerce_jobs_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_construction_cluster_gravity_exp_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_construction_cluster_gravity_inv_sq |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_construction_jobs_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_construction_jobs_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_construction_jobs_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_construction_jobs_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_local_services_cluster_gravity_exp_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_local_services_cluster_gravity_inv_sq |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_local_services_jobs_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_local_services_jobs_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_local_services_jobs_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_local_services_jobs_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_logistics_jobs_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_logistics_jobs_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_logistics_jobs_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_mfg_jobs_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_mfg_jobs_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_mfg_jobs_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_public_admin_cluster_gravity_exp_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_public_admin_cluster_gravity_inv_sq |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_public_admin_jobs_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_public_admin_jobs_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_public_admin_jobs_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| log_public_admin_jobs_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_business_services_cluster_area_km2 |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_business_services_cluster_businesses |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_business_services_cluster_id |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_business_services_cluster_jobs |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_business_services_cluster_jobs_per_km2 |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_business_services_cluster_rank |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_care_education_health_cluster_area_km2 |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_care_education_health_cluster_businesses |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_care_education_health_cluster_id |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_care_education_health_cluster_jobs |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_care_education_health_cluster_jobs_per_km2 |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_care_education_health_cluster_rank |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_commerce_cluster_area_km2 |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_commerce_cluster_businesses |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_commerce_cluster_id |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_commerce_cluster_jobs |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_commerce_cluster_jobs_per_km2 |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_commerce_cluster_rank |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_construction_cluster_area_km2 |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_construction_cluster_businesses |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_construction_cluster_id |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_construction_cluster_jobs |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_construction_cluster_jobs_per_km2 |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_construction_cluster_rank |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_local_services_cluster_area_km2 |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_local_services_cluster_businesses |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_local_services_cluster_id |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_local_services_cluster_jobs |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_local_services_cluster_jobs_per_km2 |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_local_services_cluster_rank |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_public_admin_cluster_area_km2 |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_public_admin_cluster_businesses |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_public_admin_cluster_id |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_public_admin_cluster_jobs |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_public_admin_cluster_jobs_per_km2 |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| nearest_public_admin_cluster_rank |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| public_admin_cluster_gravity_exp_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| public_admin_cluster_gravity_inv_sq |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| public_admin_clusters_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| public_admin_clusters_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| public_admin_clusters_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| public_admin_clusters_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| public_admin_distance_nearest_cluster_centroid_km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| public_admin_distance_nearest_cluster_km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| public_admin_jobs_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| public_admin_jobs_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| public_admin_jobs_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| public_admin_jobs_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| public_admin_largest_cluster_jobs_within_1km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| public_admin_largest_cluster_jobs_within_2km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| public_admin_largest_cluster_jobs_within_500m |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| public_admin_largest_cluster_jobs_within_5km |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| within_1km_of_business_services_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| within_1km_of_care_education_health_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| within_1km_of_commerce_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| within_1km_of_construction_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| within_1km_of_local_services_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| within_1km_of_public_admin_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| within_2km_of_business_services_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| within_2km_of_care_education_health_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| within_2km_of_commerce_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| within_2km_of_construction_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| within_2km_of_local_services_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| within_2km_of_public_admin_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| within_500m_of_business_services_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| within_500m_of_care_education_health_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| within_500m_of_commerce_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| within_500m_of_construction_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| within_500m_of_local_services_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| within_500m_of_public_admin_cluster |  | other | available raw feature; no prepared representation |  | available raw feature not classified into a documented family |
+| accessibility_services | accessibility_services_scaled | service_accessibility | divide by 0.05 | 0.05 | service accessibility feature |
+| min(travel_time_crossing_west, travel_time_crossing_east) | travel_time_nearest_crossing_scaled | travel_time | divide by 200 seconds | 200 | derived nearest border-crossing travel-time feature |
+| travel_time_city_center | travel_time_city_center_scaled | travel_time | divide by 200 seconds | 200 | travel-time feature to city center |
+| travel_time_crossing_east |  | travel_time | combined into nearest crossing time |  | raw travel-time feature used to derive nearest crossing time |
+| travel_time_crossing_west |  | travel_time | combined into nearest crossing time |  | raw travel-time feature used to derive nearest crossing time |
 
 ## Sector Cluster Configuration
 
@@ -356,7 +357,7 @@ Paths in generated tables are relative to `DATA_PATH` unless otherwise noted.
 
 ## Sector Cluster Threshold Audit
 
-| sector | output_prefix | hotspot_min_jobs | hotspot_min_businesses | hotspot_candidate_cells | selected_clusters | selected_cluster_jobs | selected_cluster_businesses |
+| sector | output_prefix | hotspot_min_jobs | hotspot_min_businesses | hotspot_cells_before_cluster_threshold | clusters_passing_threshold | jobs_in_clusters_passing_threshold | businesses_in_clusters_passing_threshold |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | manufacturing | mfg | 500 | 2 | 174 | 14 | 54822 | 266 |
 | construction | construction | 500 | 2 | 62 | 4 | 2333 | 17 |

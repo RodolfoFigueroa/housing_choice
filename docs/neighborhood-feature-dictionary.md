@@ -2,9 +2,9 @@
 
 ## Identifiers And Access
 
-`name`, `name_detail`, and `geometry` identify the neighborhood alternative and
-are not model covariates. `access` is transformed into `access_is_restricted`,
-where `LIBRE` maps to 0 and `RESTRINGIDO` maps to 1.
+`name`, `name_detail`, and `geometry` identify the neighborhood alternative.
+`access` is represented as `access_is_restricted`, where `LIBRE` maps to 0 and
+`RESTRINGIDO` maps to 1.
 
 `access_is_restricted` controls for gated or restricted-access developments. It
 should not be interpreted as a pure amenity: restricted access may also be
@@ -43,8 +43,9 @@ mesh cells and averaged over mesh cells intersecting each neighborhood.
 The resulting `jobs_*_2025` columns are accessibility scores in worker units,
 but they are not raw counts inside a polygon and not exact point-to-point
 commute times. They are network-reachable, exponentially decayed worker
-opportunities within the requested threshold. The feature catalog scales
-eligible job features by a data-derived denominator and appends `_scaled`.
+opportunities within the requested threshold. The generated feature catalog
+shows which job accessibility columns have prepared scaled versions and the
+denominator used for each scale.
 
 Sector groups requested by this project:
 
@@ -141,9 +142,9 @@ The notebook uses Google Dynamic World `GOOGLE/DYNAMICWORLD/V1`, selects the
 area, and reduces the result over each neighborhood. The exported columns are
 `built_area_2020` through `built_area_2025` in square meters.
 
-For transaction-year-aware analysis, the prepared transformation maps each
-purchase to the built-area column matching the purchase year and transforms it
-as `log1p(area_m2 / 10000)`, producing `log_built_area_ha`.
+For transaction-year-aware analysis, the prepared representation maps each
+purchase to the built-area column matching the purchase year and derives
+`log_built_area_ha` as `log1p(area_m2 / 10000)`.
 
 Interpretation: this is a broad development-intensity and supply proxy. It is
 not a direct measure of available units, project inventory, housing quality, or
@@ -160,16 +161,16 @@ aggregates jobs to a 250 meter grid around the cleaned neighborhoods with a
 10 km buffer.
 
 It computes spatial statistics on grid job counts, including global Moran's I,
-local Moran high-high cells, and Getis-Ord Gi* hotspot cells. Hotspot candidate
-cells are dissolved into connected clusters. Selected clusters must have at
-least 500 approximate jobs and at least 2 businesses under the configured
-thresholds.
+local Moran high-high cells, and Getis-Ord Gi* hotspot cells. Hotspot cells are
+dissolved into connected clusters before the cluster-level thresholds are
+applied. Clusters must have at least 500 approximate jobs and at least 2
+businesses under the configured thresholds.
 
 For each neighborhood and sector, the pipeline exports nearest-cluster
 attributes, distance to nearest cluster boundary and centroid, booleans for
 cluster proximity, jobs within configured distance bands, and gravity-style
 cluster exposure metrics. The generated feature catalog records which raw
-columns have prepared transformations.
+columns have prepared representations.
 
 Interpretation: cluster features measure exposure to dense sectoral employment
 clusters, not general accessibility to every job in the sector. Distance

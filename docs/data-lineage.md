@@ -58,9 +58,10 @@ table.
 
 ## Feature Catalog
 
-The helper `housing_choice.modeling.build_feature_catalog` classifies each raw
-feature column into families, roles, transformations, and eligibility flags that
-downstream analyses can inspect.
+The helper `housing_choice.modeling.build_feature_catalog` provides source
+metadata that the generated documentation projects into feature families,
+prepared column names, derivation notes, scale denominators, and feature
+descriptions.
 
 The generated raw catalog is available at
 `docs/generated/feature-catalog.md`. Regenerate it after rebuilding
