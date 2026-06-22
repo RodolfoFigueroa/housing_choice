@@ -37,7 +37,7 @@ def _():
     mo.md("""
     # Housing Choice Modelling
 
-    Clean modelling workflow for neighborhood choice models. The notebook consumes the canonical neighborhood feature export from `09_generate_neighborhood_features.py` and keeps exploratory screening separate from final Biogeme estimation.
+    Clean modelling workflow for neighborhood choice models. The notebook consumes the canonical neighborhood feature export from `notebooks/15_generate_neighborhood_features.py` and keeps exploratory screening separate from final Biogeme estimation.
     """)
     return
 
@@ -119,7 +119,7 @@ def _():
     mo.md("""
     ## Data Inputs
 
-    Load the canonical processed inputs. The neighborhood table is produced by `09_generate_neighborhood_features.py`; the transaction table is filtered to the same neighborhood naming convention.
+    Load the canonical processed inputs. The neighborhood table is produced by `notebooks/15_generate_neighborhood_features.py`; the transaction table is filtered to the same neighborhood naming convention.
     """)
     return
 
