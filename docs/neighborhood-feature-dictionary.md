@@ -71,6 +71,27 @@ feature is still spatially aggregated, so it can be correlated with peripheral
 development patterns, industrial land uses, road corridors, or where
 social-housing projects are supplied.
 
+### Grouped Job-Accessibility Modeling Features
+
+`notebooks/job_extensions.py` constructs grouped job-accessibility candidates
+in memory with `housing_choice.modeling.add_job_group_features`. These grouped
+features are not new source data; they are model-ready combinations of the
+scaled job-accessibility columns already exported in `col_final.gpkg`.
+
+The grouped candidates are:
+
+| Grouped model column pattern | Source columns |
+| --- | --- |
+| `jobs_group_all_{10,20}_2025_scaled` | `jobs_all_{10,20}_2025_scaled` |
+| `jobs_group_industrial_{10,20}_2025_scaled` | mean of `jobs_manufacture_*`, `jobs_logistics_*`, and `jobs_construction_*` |
+| `jobs_group_services_{10,20}_2025_scaled` | mean of `jobs_business_services_*`, `jobs_care_education_health_*`, and `jobs_local_services_*` |
+| `jobs_group_commerce_{10,20}_2025_scaled` | `jobs_commerce_{10,20}_2025_scaled` |
+
+These grouped columns are intended to make employment-access extensions more
+interpretable and less sensitive to highly collinear sector-specific columns.
+They should still be interpreted as conditional neighborhood-level
+associations, not as direct evidence of household workplace locations.
+
 ## Service Accessibility
 
 Source in this project:

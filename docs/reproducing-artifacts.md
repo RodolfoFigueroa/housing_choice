@@ -4,9 +4,10 @@ This document describes the environment, source data, external services, and
 execution order needed to rebuild the canonical generated artifacts. It is
 intended for someone setting up the repository for the first time.
 
-It does not describe or endorse any specific discrete choice model
-specification. Downstream modeling notebooks should document their own feature
-selection and interpretation decisions.
+It separates canonical data-artifact regeneration from model estimation. The
+current discrete-choice baseline and grouped job-extension notebooks are
+documented in [model methodology](model-methodology.md), but they do not write
+canonical generated data artifacts.
 
 See the [glossary](glossary.md) for project-specific definitions of external
 services, source data, spatial formats, and feature-method terms used below.
@@ -140,6 +141,29 @@ sector-cluster artifacts, then writes:
 `scripts/generate_doc_tables.py` reads `generated/col_final.gpkg` and writes:
 
 - `docs/generated/feature-catalog.md`
+
+## Modeling Notebooks
+
+After the canonical artifacts exist, the current modeling notebooks can be run
+from the repository root:
+
+```bash
+uv run --env-file .env marimo export session --no-continue-on-error notebooks/baseline.py
+uv run --env-file .env marimo export session --no-continue-on-error notebooks/job_extensions.py
+```
+
+`notebooks/baseline.py` uses
+`housing_choice.modeling.build_structural_baseline_inputs` to assemble the
+shared structural baseline and fit the availability-aware Biogeme model.
+
+`notebooks/job_extensions.py` uses the same shared baseline inputs, adds
+grouped job-accessibility features, runs a fast availability-aware screen, and
+fits Biogeme for the structural baseline plus the top two grouped job
+extensions.
+
+These notebooks are analysis outputs, not data-lineage inputs. Rerun them after
+changing the model helpers, generated feature data, or the candidate-extension
+logic.
 
 ## Troubleshooting
 

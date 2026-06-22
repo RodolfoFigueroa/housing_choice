@@ -67,6 +67,26 @@ The generated raw catalog is available at
 `docs/generated/feature-catalog.md`. Regenerate it after rebuilding
 `col_final.gpkg` or changing the feature catalog helper.
 
+## Modeling Layer
+
+The modeling layer starts from `generated/col_final.gpkg` and
+`generated/transactions_final.parquet`; it does not create new canonical
+generated data artifacts.
+
+`housing_choice.modeling.build_structural_baseline_inputs` is the shared
+assembly point for the current structural baseline. It loads the final
+artifacts, prepares the feature catalog, adds centroid spatial controls,
+matches transactions to retained neighborhoods, builds the active choice set,
+and derives the transaction-specific `log_active_sales_12m` matrix.
+
+`notebooks/baseline.py` consumes that shared assembly directly. Extension
+notebooks should do the same unless they intentionally test a different
+choice-set or supply story.
+
+`notebooks/job_extensions.py` adds grouped job-accessibility columns in memory
+with `housing_choice.modeling.add_job_group_features`. The grouped columns are
+model candidates only; they are not written back to `col_final.gpkg`.
+
 ## External Provenance
 
 Lyra is an external service. This project pins the Lyra API and SDK client in

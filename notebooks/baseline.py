@@ -8,23 +8,17 @@ with app.setup(hide_code=True):
     import warnings
     from pathlib import Path
 
-    import geopandas as gpd
     import marimo as mo
     import matplotlib.pyplot as plt
     import numpy as np
     import pandas as pd
 
     from housing_choice.modeling import (
-        add_centroid_spatial_controls,
-        align_choice_data,
-        build_active_choice_set,
         build_availability_choice_dataframe,
-        build_feature_catalog,
+        build_structural_baseline_inputs,
         compute_scale_audit,
         fit_biogeme_availability_model,
         predict_availability_choice_shares,
-        prepare_baseline_transactions,
-        prepare_neighborhood_features,
         summarize_availability_by_transaction,
         validate_availability_choice_dataframe,
     )
@@ -69,13 +63,12 @@ def _():
         ACTIVE_WINDOW_DAYS,
         BASELINE_STATIC_COLS,
         BIOGEME_MODEL_PREFIX,
+        DATA_PATH,
         MIN_AVAILABLE_ALTERNATIVES,
         MISSING_VALUE_SENTINEL,
         MODELING_YEAR_MAX,
         MODELING_YEAR_MIN,
-        NEIGHBORHOOD_FEATURES_PATH,
         SUPPLY_FEATURE,
-        TRANSACTIONS_PATH,
     )
 
 
@@ -97,28 +90,45 @@ def _(
 
 
 @app.cell
-def _(NEIGHBORHOOD_FEATURES_PATH, TRANSACTIONS_PATH):
-    df_neighborhood_raw = gpd.read_file(NEIGHBORHOOD_FEATURES_PATH)
-    df_transactions_raw = pd.read_parquet(TRANSACTIONS_PATH)
+def _(
+    ACTIVE_WINDOW_DAYS,
+    BASELINE_STATIC_COLS,
+    DATA_PATH,
+    MIN_AVAILABLE_ALTERNATIVES,
+    MODELING_YEAR_MAX,
+    MODELING_YEAR_MIN,
+    SUPPLY_FEATURE,
+):
+    baseline_inputs = build_structural_baseline_inputs(
+        DATA_PATH,
+        min_year=MODELING_YEAR_MIN,
+        max_year=MODELING_YEAR_MAX,
+        window_days=ACTIVE_WINDOW_DAYS,
+        min_available_alternatives=MIN_AVAILABLE_ALTERNATIVES,
+        baseline_static_cols=BASELINE_STATIC_COLS,
+        supply_feature=SUPPLY_FEATURE,
+    )
+    df_neighborhood_raw = baseline_inputs.df_neighborhood_raw
+    df_transactions_raw = baseline_inputs.df_transactions_raw
 
     input_summary = pd.DataFrame(
         [
             {
                 "artifact": "neighborhood_features",
-                "path": str(NEIGHBORHOOD_FEATURES_PATH),
+                "path": str(baseline_inputs.neighborhood_features_path),
                 "rows": len(df_neighborhood_raw),
                 "columns": len(df_neighborhood_raw.columns),
             },
             {
                 "artifact": "transactions",
-                "path": str(TRANSACTIONS_PATH),
+                "path": str(baseline_inputs.transactions_path),
                 "rows": len(df_transactions_raw),
                 "columns": len(df_transactions_raw.columns),
             },
         ]
     )
     input_summary
-    return df_neighborhood_raw, df_transactions_raw
+    return (baseline_inputs,)
 
 
 @app.cell(hide_code=True)
@@ -132,18 +142,10 @@ def _():
 
 
 @app.cell
-def _(BASELINE_STATIC_COLS, df_neighborhood_raw):
-    feature_catalog = build_feature_catalog(df_neighborhood_raw)
-    prepared_neighborhood_features = prepare_neighborhood_features(
-        df_neighborhood_raw,
-        feature_catalog,
-    ).pipe(add_centroid_spatial_controls)
-
-    built_area_cols = sorted(
-        column
-        for column in prepared_neighborhood_features.columns
-        if column.startswith("built_area_")
-    )
+def _(BASELINE_STATIC_COLS, baseline_inputs):
+    feature_catalog = baseline_inputs.feature_catalog
+    prepared_neighborhood_features = baseline_inputs.prepared_neighborhood_features
+    built_area_cols = baseline_inputs.built_area_cols
 
     baseline_feature_summary = pd.DataFrame(
         [
@@ -154,7 +156,7 @@ def _(BASELINE_STATIC_COLS, df_neighborhood_raw):
         ]
     )
     baseline_feature_summary
-    return built_area_cols, prepared_neighborhood_features
+    return (built_area_cols,)
 
 
 @app.cell(hide_code=True)
@@ -168,56 +170,15 @@ def _():
 
 
 @app.cell
-def _(
-    ACTIVE_WINDOW_DAYS,
-    MIN_AVAILABLE_ALTERNATIVES,
-    MODELING_YEAR_MAX,
-    MODELING_YEAR_MIN,
-    SUPPLY_FEATURE,
-    df_transactions_raw,
-    prepared_neighborhood_features,
-):
-    df_transactions_baseline = prepare_baseline_transactions(
-        df_transactions_raw,
-        prepared_neighborhood_features["name_detail"].tolist(),
-        MODELING_YEAR_MIN,
-        MODELING_YEAR_MAX,
-    )
-    (
-        choice_neighborhood_features,
-        df_transactions_aligned,
-        _name_to_idx_map,
-    ) = align_choice_data(
-        prepared_neighborhood_features,
-        df_transactions_baseline,
-        prepared_neighborhood_features["name_detail"].tolist(),
-    )
+def _(baseline_inputs):
+    df_transactions_baseline = baseline_inputs.df_transactions_baseline
+    df_transactions_aligned = baseline_inputs.df_transactions_aligned
+    choice_neighborhood_features = baseline_inputs.choice_neighborhood_features
+    _name_to_idx_map = baseline_inputs.name_to_idx_map
+    active_choice_set = baseline_inputs.active_choice_set
+    dynamic_alt_features = dict(baseline_inputs.dynamic_alt_features)
 
-    active_choice_set = build_active_choice_set(
-        df_transactions_aligned,
-        len(choice_neighborhood_features),
-        window_days=ACTIVE_WINDOW_DAYS,
-        min_available_alternatives=MIN_AVAILABLE_ALTERNATIVES,
-    )
-    dynamic_alt_features = {
-        SUPPLY_FEATURE: np.log1p(active_choice_set.active_sales),
-    }
-
-    choice_set_summary = active_choice_set.summary.assign(
-        candidate_neighborhoods=len(choice_neighborhood_features),
-        matched_transactions=len(df_transactions_baseline),
-    )[
-        [
-            "candidate_neighborhoods",
-            "matched_transactions",
-            "kept_transactions",
-            "dropped_transactions",
-            "drop_share",
-            "min_available_alternatives",
-            "median_available_alternatives",
-            "max_available_alternatives",
-        ]
-    ].round(3)
+    choice_set_summary = baseline_inputs.choice_set_summary.round(3)
     choice_set_summary
     return (
         active_choice_set,

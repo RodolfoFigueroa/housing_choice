@@ -8,11 +8,12 @@ analysis workflow.
 Read the documents in this order:
 
 1. [Model methodology](model-methodology.md) explains the research objective,
-   analysis unit, and caveats.
+   analysis unit, current discrete-choice baseline, grouped job extensions, and
+   caveats.
 2. [Reproducing artifacts](reproducing-artifacts.md) explains environment
    variables, source-data contracts, external services, and regeneration order.
-3. [Glossary](glossary.md) defines project-specific data, spatial, metric, and
-   method terms used across the documentation.
+3. [Glossary](glossary.md) defines project-specific data, spatial, metric,
+   modeling, and method terms used across the documentation.
 4. [Data lineage](data-lineage.md) traces the artifacts from raw inputs to the
    final analysis tables.
 5. [Neighborhood feature dictionary](neighborhood-feature-dictionary.md)

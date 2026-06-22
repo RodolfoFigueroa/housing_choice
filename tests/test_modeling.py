@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 from housing_choice.modeling import (
     add_centroid_spatial_controls,
+    add_job_group_features,
     align_choice_data,
     build_active_choice_set,
     build_availability_choice_dataframe,
@@ -20,9 +21,11 @@ from housing_choice.modeling import (
     build_combination_model_specs,
     build_feature_catalog,
     build_feature_diagnostics_frame,
+    build_job_group_specs,
     build_single_candidate_model_specs,
     compute_feature_diagnostics,
     compute_scale_audit,
+    fit_fast_availability_mnl_screen,
     fit_fast_mnl_screen,
     prepare_baseline_transactions,
     prepare_neighborhood_features,
@@ -421,3 +424,116 @@ class ModelingTest(TestCase):
         assert choice_frame.loc[2, "log_active_sales_12m_1"] == 0.0
         assert choice_frame.loc[2, "available_1"] == 1
         assert validation["passed"].all()
+
+    def test_job_group_features_average_interpretable_groups(self) -> None:
+        neighborhood_features = pd.DataFrame(
+            {
+                "jobs_all_20_2025_scaled": [1.0, 2.0],
+                "jobs_manufacture_20_2025_scaled": [2.0, 4.0],
+                "jobs_logistics_20_2025_scaled": [4.0, 8.0],
+                "jobs_construction_20_2025_scaled": [6.0, 12.0],
+                "jobs_business_services_20_2025_scaled": [10.0, 20.0],
+                "jobs_care_education_health_20_2025_scaled": [20.0, 40.0],
+                "jobs_local_services_20_2025_scaled": [30.0, 60.0],
+                "jobs_commerce_20_2025_scaled": [3.0, 6.0],
+            },
+        )
+        specs = build_job_group_specs((20,))
+
+        with_groups, catalog = add_job_group_features(neighborhood_features, specs)
+
+        assert catalog["model_column"].tolist() == [
+            "jobs_group_all_20_2025_scaled",
+            "jobs_group_industrial_20_2025_scaled",
+            "jobs_group_services_20_2025_scaled",
+            "jobs_group_commerce_20_2025_scaled",
+        ]
+        assert with_groups["jobs_group_all_20_2025_scaled"].tolist() == [1.0, 2.0]
+        assert with_groups["jobs_group_industrial_20_2025_scaled"].tolist() == [
+            4.0,
+            8.0,
+        ]
+        assert with_groups["jobs_group_services_20_2025_scaled"].tolist() == [
+            20.0,
+            40.0,
+        ]
+        assert with_groups["jobs_group_commerce_20_2025_scaled"].tolist() == [
+            3.0,
+            6.0,
+        ]
+
+    def test_job_group_features_reject_missing_inputs_and_duplicate_outputs(
+        self,
+    ) -> None:
+        specs = build_job_group_specs((20,))
+        missing_message = value_error_message(
+            lambda: add_job_group_features(
+                pd.DataFrame({"jobs_all_20_2025_scaled": [1.0]}),
+                specs,
+            ),
+        )
+        assert "missing job group inputs" in missing_message
+
+        duplicate_frame = pd.DataFrame(
+            {
+                "jobs_all_20_2025_scaled": [1.0],
+                "jobs_manufacture_20_2025_scaled": [1.0],
+                "jobs_logistics_20_2025_scaled": [1.0],
+                "jobs_construction_20_2025_scaled": [1.0],
+                "jobs_business_services_20_2025_scaled": [1.0],
+                "jobs_care_education_health_20_2025_scaled": [1.0],
+                "jobs_local_services_20_2025_scaled": [1.0],
+                "jobs_commerce_20_2025_scaled": [1.0],
+                "jobs_group_all_20_2025_scaled": [1.0],
+            },
+        )
+        duplicate_message = value_error_message(
+            lambda: add_job_group_features(duplicate_frame, specs),
+        )
+        assert "job group outputs already exist" in duplicate_message
+
+    def test_availability_fast_screen_is_finite_with_dynamic_supply(self) -> None:
+        neighborhood_features = pd.DataFrame(
+            {
+                "name_detail": ["A", "B", "C"],
+                "x": [0.0, 1.0, 2.0],
+                "built_area_2020": [10_000.0, 20_000.0, 30_000.0],
+                "built_area_2021": [20_000.0, 30_000.0, 40_000.0],
+            },
+        )
+        transactions = pd.DataFrame(
+            {
+                "neighborhood_idx": [0, 1, 2, 1, 2, 0],
+                "purchase_year": [2020, 2020, 2020, 2021, 2021, 2021],
+            },
+        )
+        availability = np.array(
+            [
+                [True, True, False],
+                [True, True, False],
+                [False, True, True],
+                [True, True, True],
+                [False, True, True],
+                [True, False, True],
+            ],
+        )
+        log_active_sales = availability.astype(float)
+
+        screen_row, coefficients = fit_fast_availability_mnl_screen(
+            "availability_demo",
+            ["x"],
+            neighborhood_features,
+            transactions,
+            ["built_area_2020", "built_area_2021"],
+            availability,
+            dynamic_alt_features={"log_active_sales_12m": log_active_sales},
+        )
+
+        aic = screen_row["aic"]
+        assert isinstance(aic, float)
+        assert np.isfinite(aic)
+        assert coefficients["feature"].tolist() == [
+            "x",
+            "log_active_sales_12m",
+            "log_built_area_ha",
+        ]

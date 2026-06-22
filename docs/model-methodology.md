@@ -22,9 +22,72 @@ The stable inputs for downstream modeling are:
 - `DATA_PATH/generated/transactions_final.parquet`
 
 These artifacts contain the retained neighborhood geometries, neighborhood
-features, and cleaned transaction records. Any future model specification should
-document its own filtering rules, choice-set definition, covariate selection,
-and estimation method separately from this provenance note.
+features, and cleaned transaction records. Current modeling notebooks should
+reuse `housing_choice.modeling.build_structural_baseline_inputs` so they share
+the same filtering rules, choice-set definition, supply/activity proxy, and
+prepared covariate columns.
+
+## Current Discrete-Choice Baseline
+
+The current baseline lives in `notebooks/baseline.py`. It replaces the legacy
+all-neighborhoods-always-available setup with an availability-aware multinomial
+logit estimated with Biogeme.
+
+The shared baseline builder:
+
+- keeps purchases from 2020 through 2025 whose cleaned address matches a
+  retained neighborhood;
+- uses every retained neighborhood from `col_final.gpkg` as the candidate
+  alternative universe;
+- defines transaction-specific available alternatives as neighborhoods with
+  another observed purchase within a 365-day window around the focal purchase
+  date, while always keeping the chosen neighborhood available;
+- drops transactions only if fewer than two alternatives are available;
+- adds `log_active_sales_12m`, derived from the transaction-specific active
+  sales matrix, as a supply/activity proxy;
+- maps transaction year to `log_built_area_ha` from the matching
+  `built_area_YYYY` column;
+- includes service accessibility, city-center travel time, nearest-crossing
+  travel time, restricted access, and centroid east/north controls;
+- intentionally excludes employment-access variables.
+
+The baseline should be treated as the measuring stick for later model
+extensions. It is not meant to be permanent; it is meant to be stable,
+compact, reproducible, and explicit enough that a new extension can be compared
+against it without reinterpreting the data assembly.
+
+## Grouped Job Extensions
+
+The first model extension lives in `notebooks/job_extensions.py`. It tests
+whether job accessibility adds explanatory value after holding the baseline
+choice set, supply/activity proxy, built-area term, and controls fixed.
+
+The extension deliberately avoids single-sector fishing by adding one grouped
+job feature at a time. The current grouped candidates are:
+
+- all jobs at 10 and 20 minutes;
+- industrial jobs at 10 and 20 minutes, computed as the mean of manufacturing,
+  logistics, and construction accessibility;
+- services jobs at 10 and 20 minutes, computed as the mean of business
+  services, care/education/health, and local services accessibility;
+- commerce jobs at 10 and 20 minutes.
+
+Public administration accessibility is excluded from these grouped candidates
+because the current prepared feature has no useful variation.
+
+The job-extension notebook first uses
+`housing_choice.modeling.fit_fast_availability_mnl_screen` to rank all grouped
+job candidates with the same availability mask and dynamic supply feature used
+by the Biogeme model. It then fits Biogeme only for the structural baseline and
+the top two non-baseline screen candidates. A grouped job candidate is marked
+for continuation only if it improves Biogeme AIC by at least 2, has a positive
+job coefficient, and has robust p-value below 0.10.
+
+In the current generated data, the two industrial grouped candidates are the
+Biogeme finalists selected by the fast screen. This should be read as a
+model-building signal, not as a final claim that buyers prefer industrial jobs:
+the next modeling step should test whether that signal survives stronger
+spatial controls.
 
 ## Interpretation Caveats
 
@@ -58,6 +121,8 @@ developer characteristics.
 
 Before estimating or revising a model, maintainers should verify feature
 provenance, units, transformations, aggregation level, and choice-set
-construction. The documents in this folder are intended to make that
-verification explicit without encoding any particular model specification or
-result.
+construction. New model notebooks should either call the shared structural
+baseline builder or document why they intentionally depart from it. Extension
+notebooks should keep their candidate set compact, record model-comparison
+criteria, and avoid promoting a feature into a new baseline until spatial and
+supply confounding have been checked.

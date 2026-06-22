@@ -102,6 +102,86 @@ def fit_fast_mnl_screen(
     )
 
 
+def fit_fast_availability_mnl_screen(  # noqa: PLR0913
+    spec_id: str,
+    static_cols: Sequence[str],
+    neighborhood_features: pd.DataFrame,
+    transactions: pd.DataFrame,
+    built_area_cols: Sequence[str],
+    availability: np.ndarray,
+    *,
+    dynamic_alt_features: Mapping[str, np.ndarray] | None = None,
+    missing_value_sentinel: int = 99999,
+) -> tuple[dict[str, object], pd.DataFrame]:
+    choice_frame, model_feature_cols = build_availability_choice_dataframe(
+        neighborhood_features,
+        transactions,
+        static_cols,
+        built_area_cols,
+        availability,
+        dynamic_alt_features,
+    )
+    validation = validate_availability_choice_dataframe(
+        choice_frame,
+        model_feature_cols,
+        len(neighborhood_features),
+        missing_value_sentinel=missing_value_sentinel,
+    )
+    if not validation["passed"].all():
+        failed = validation.loc[~validation["passed"], "check"].tolist()
+        msg = f"Availability choice frame validation failed for {spec_id}: {failed}"
+        raise ValueError(msg)
+
+    y = choice_frame["neighborhood_idx"].astype(int).to_numpy()
+    n_obs = len(choice_frame)
+    n_alt = len(neighborhood_features)
+    choice_rows = np.arange(n_obs)
+    availability_matrix = choice_frame.loc[
+        :,
+        [f"available_{idx}" for idx in range(n_alt)],
+    ].to_numpy(dtype=bool)
+    x = np.empty((n_obs, n_alt, len(model_feature_cols)), dtype=float)
+    for feature_idx, feature in enumerate(model_feature_cols):
+        x[:, :, feature_idx] = choice_frame.loc[
+            :,
+            [f"{feature}_{idx}" for idx in range(n_alt)],
+        ].to_numpy(dtype=float)
+    chosen_x = x[choice_rows, y, :]
+
+    def nll(beta: np.ndarray) -> float:
+        utility = np.where(availability_matrix, x @ beta, -np.inf)
+        return -float((chosen_x @ beta - logsumexp(utility, axis=1)).sum())
+
+    opt = minimize(
+        nll,
+        np.zeros(x.shape[2]),
+        method="L-BFGS-B",
+        options={"maxiter": 1000, "ftol": 1e-10, "gtol": 1e-6},
+    )
+    final_ll = -float(opt.fun)
+    n_params = len(model_feature_cols)
+    coefficient_frame = pd.DataFrame(
+        {
+            "spec_id": spec_id,
+            "feature": model_feature_cols,
+            "screen_coef": opt.x,
+        },
+    )
+    return (
+        {
+            "spec_id": spec_id,
+            "parameters": n_params,
+            "sample_size": n_obs,
+            "final_log_likelihood": final_ll,
+            "aic": 2 * n_params - 2 * final_ll,
+            "bic": math.log(n_obs) * n_params - 2 * final_ll,
+            "screen_converged": bool(opt.success),
+            "screen_message": str(opt.message),
+        },
+        coefficient_frame,
+    )
+
+
 def make_biogeme_parameters(*, use_jit: bool = True) -> Parameters:
     params = Parameters()
     for name, value in {

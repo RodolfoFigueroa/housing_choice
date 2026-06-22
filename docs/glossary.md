@@ -164,6 +164,19 @@ Network-based opportunity measure assigned to a neighborhood. It is not a raw
 count inside the neighborhood polygon and should not be interpreted as a direct
 household preference measure.
 
+**Active choice set**
+
+Transaction-specific set of available neighborhood alternatives used by the
+current structural baseline. A neighborhood is available for a purchase if it
+has another observed purchase within the configured time window around the
+focal transaction date; the chosen neighborhood is always available.
+
+**Availability-aware multinomial logit**
+
+Discrete-choice model where each transaction can have a different availability
+mask over neighborhood alternatives. The current baseline and grouped
+job-extension notebooks use this structure.
+
 **Built area**
 
 Estimated neighborhood area classified as built land cover by Google Dynamic
@@ -175,6 +188,20 @@ available inventory, or housing quality.
 Feature family that measures proximity or exposure to dense sectoral
 employment clusters. It is different from accessibility because it focuses on
 detected concentrations of jobs rather than all reachable jobs in a sector.
+
+**Continuation flag**
+
+Notebook diagnostic used when deciding whether a model extension is worth
+carrying forward. In the grouped job-extension notebook, a candidate passes
+only if it improves Biogeme AIC by at least 2, has a positive job coefficient,
+and has robust p-value below 0.10.
+
+**Fast availability screen**
+
+Lightweight multinomial-logit estimator used to rank many candidate extensions
+before running slower Biogeme fits. It uses the same active choice set and
+dynamic alternative features as the availability-aware Biogeme model, but it is
+only a screening device.
 
 **Exponential decay**
 
@@ -198,6 +225,13 @@ dispersed, or close to random at the global scale.
 
 Cluster-exposure measure that discounts cluster jobs by distance. The project
 exports inverse-square and exponential-decay variants for sector clusters.
+
+**Grouped job accessibility**
+
+Modeling feature that combines related scaled job-accessibility columns into a
+more interpretable candidate, such as industrial jobs or services jobs. Grouped
+features are built in memory for model comparison and are not written back to
+the canonical neighborhood feature artifact.
 
 **Job accessibility**
 
@@ -254,6 +288,13 @@ buyer demand and where social-housing supply was available.
 Documented caveat for Mexicali: social housing tends to be clustered in the
 south-southeast peripheral region. Many neighborhood features may vary along
 this same spatial gradient, so feature associations can contain spatial noise.
+
+**Structural baseline**
+
+Current measuring-stick discrete-choice model in `notebooks/baseline.py`. It
+uses an active choice set, supply/activity proxy, transaction-year built area,
+service and travel-time controls, restricted access, and centroid spatial
+controls, while excluding job-accessibility variables.
 
 ## Maintenance
 
