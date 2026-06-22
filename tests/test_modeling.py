@@ -12,7 +12,10 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 from housing_choice.modeling import (
+    add_centroid_spatial_controls,
     align_choice_data,
+    build_active_choice_set,
+    build_availability_choice_dataframe,
     build_choice_dataframe,
     build_combination_model_specs,
     build_feature_catalog,
@@ -21,8 +24,10 @@ from housing_choice.modeling import (
     compute_feature_diagnostics,
     compute_scale_audit,
     fit_fast_mnl_screen,
+    prepare_baseline_transactions,
     prepare_neighborhood_features,
     prepare_transactions,
+    validate_availability_choice_dataframe,
     validate_choice_dataframe,
 )
 
@@ -298,3 +303,121 @@ class ModelingTest(TestCase):
         assert warnings["binary"] == "binary"
         assert warnings["large"] == "too large"
         assert warnings["ok"] == "ok"
+
+    def test_prepare_baseline_transactions_keeps_all_matched_neighborhoods(
+        self,
+    ) -> None:
+        transactions = pd.DataFrame(
+            {
+                "address": ["A", "B", "C", "A"],
+                "purchase_date": [
+                    "2020-01-01",
+                    "2021-01-01",
+                    "2022-01-01",
+                    "2019-01-01",
+                ],
+            },
+        )
+
+        prepared = prepare_baseline_transactions(transactions, ["A", "B"], 2020, 2021)
+
+        assert prepared["neighborhood"].tolist() == ["A", "B"]
+        assert prepared["purchase_year"].tolist() == [2020, 2021]
+        assert prepared["transaction_id"].tolist() == [0, 1]
+
+    def test_spatial_controls_are_centered_and_scaled_in_km(self) -> None:
+        neighborhoods = gpd.GeoDataFrame(
+            {
+                "name_detail": ["A", "B", "C"],
+                "geometry": [
+                    shapely.Point(0, 0),
+                    shapely.Point(1000, 2000),
+                    shapely.Point(3000, 4000),
+                ],
+            },
+            geometry="geometry",
+            crs="EPSG:6372",
+        )
+
+        with_spatial = add_centroid_spatial_controls(neighborhoods)
+
+        assert with_spatial["centroid_east_km"].tolist() == [-1.0, 0.0, 2.0]
+        assert with_spatial["centroid_north_km"].tolist() == [-2.0, 0.0, 2.0]
+
+    def test_active_choice_set_excludes_focal_sale_and_forces_chosen(
+        self,
+    ) -> None:
+        transactions = pd.DataFrame(
+            {
+                "transaction_id": [0, 1, 2, 3],
+                "neighborhood_idx": [0, 0, 1, 2],
+                "purchase_date": pd.to_datetime(
+                    ["2020-01-01", "2020-01-05", "2020-01-10", "2022-01-01"],
+                ),
+                "purchase_year": [2020, 2020, 2020, 2022],
+            },
+        )
+
+        active_choice = build_active_choice_set(
+            transactions,
+            3,
+            window_days=10,
+        )
+
+        assert len(active_choice.transactions) == 3
+        assert len(active_choice.dropped_transactions) == 1
+        assert active_choice.active_sales[0].tolist() == [1.0, 1.0, 0.0]
+        assert active_choice.active_sales[2].tolist() == [2.0, 0.0, 0.0]
+        assert active_choice.availability[2].tolist() == [True, True, False]
+        assert active_choice.summary.loc[0, "min_available_alternatives"] == 2
+
+    def test_availability_choice_dataframe_validates_dynamic_supply(
+        self,
+    ) -> None:
+        neighborhood_features = pd.DataFrame(
+            {
+                "name_detail": ["A", "B", "C"],
+                "control": [0.0, 1.0, 2.0],
+                "built_area_2020": [10_000.0, 20_000.0, 30_000.0],
+            },
+        )
+        transactions = pd.DataFrame(
+            {
+                "transaction_id": [0, 1, 2],
+                "neighborhood_idx": [0, 0, 1],
+                "purchase_date": pd.to_datetime(
+                    ["2020-01-01", "2020-01-05", "2020-01-10"],
+                ),
+                "purchase_year": [2020, 2020, 2020],
+            },
+        )
+        active_choice = build_active_choice_set(
+            transactions,
+            3,
+            window_days=10,
+        )
+        log_active_sales = np.log1p(active_choice.active_sales)
+
+        choice_frame, model_feature_cols = build_availability_choice_dataframe(
+            neighborhood_features,
+            active_choice.transactions,
+            ["control"],
+            ["built_area_2020"],
+            active_choice.availability,
+            {"log_active_sales_12m": log_active_sales},
+        )
+        validation = validate_availability_choice_dataframe(
+            choice_frame,
+            model_feature_cols,
+            3,
+        )
+
+        assert model_feature_cols == [
+            "control",
+            "log_active_sales_12m",
+            "log_built_area_ha",
+        ]
+        assert choice_frame.loc[0, "log_active_sales_12m_0"] == np.log1p(1.0)
+        assert choice_frame.loc[2, "log_active_sales_12m_1"] == 0.0
+        assert choice_frame.loc[2, "available_1"] == 1
+        assert validation["passed"].all()

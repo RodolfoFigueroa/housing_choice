@@ -15,6 +15,10 @@ from scipy.optimize import minimize
 from scipy.special import logsumexp
 
 from housing_choice.modeling._utils import safe_identifier
+from housing_choice.modeling.availability import (
+    build_availability_choice_dataframe,
+    validate_availability_choice_dataframe,
+)
 from housing_choice.modeling.choice_data import (
     build_choice_dataframe,
     validate_choice_dataframe,
@@ -98,7 +102,7 @@ def fit_fast_mnl_screen(
     )
 
 
-def make_biogeme_parameters() -> Parameters:
+def make_biogeme_parameters(*, use_jit: bool = True) -> Parameters:
     params = Parameters()
     for name, value in {
         "generate_yaml": False,
@@ -106,7 +110,7 @@ def make_biogeme_parameters() -> Parameters:
         "generate_netcdf": False,
         "save_validation_results": False,
         "save_iterations": False,
-        "use_jit": True,
+        "use_jit": use_jit,
         "numerically_safe": False,
         "seed": 42,
     }.items():
@@ -206,6 +210,105 @@ def fit_biogeme_model(  # noqa: PLR0913
     }
 
 
+def fit_biogeme_availability_model(  # noqa: PLR0913
+    spec_id: str,
+    static_cols: Sequence[str],
+    neighborhood_features: pd.DataFrame,
+    transactions: pd.DataFrame,
+    built_area_cols: Sequence[str],
+    availability: np.ndarray,
+    *,
+    dynamic_alt_features: Mapping[str, np.ndarray] | None = None,
+    model_prefix: str = "baseline",
+    missing_value_sentinel: int = 99999,
+    use_jit: bool = False,
+) -> ModelArtifact:
+    choice_frame, model_feature_cols = build_availability_choice_dataframe(
+        neighborhood_features,
+        transactions,
+        static_cols,
+        built_area_cols,
+        availability,
+        dynamic_alt_features,
+    )
+    validation = validate_availability_choice_dataframe(
+        choice_frame,
+        model_feature_cols,
+        len(neighborhood_features),
+        missing_value_sentinel=missing_value_sentinel,
+    )
+    if not validation["passed"].all():
+        failed = validation.loc[~validation["passed"], "check"].tolist()
+        msg = f"Availability choice frame validation failed for {spec_id}: {failed}"
+        raise ValueError(msg)
+
+    database = db.Database(f"db_{safe_identifier(spec_id)}", choice_frame)
+    choice = Variable("neighborhood_idx")
+    beta_name_by_feature = {
+        feature: f"b_{safe_identifier(feature)}" for feature in model_feature_cols
+    }
+    if len(set(beta_name_by_feature.values())) != len(beta_name_by_feature):
+        msg = f"Duplicate beta names for {spec_id}"
+        raise ValueError(msg)
+    betas = {
+        feature: Beta(beta_name, 0, None, None, 0)
+        for feature, beta_name in beta_name_by_feature.items()
+    }
+
+    utilities = {}
+    availability_expr = {}
+    for idx in range(len(neighborhood_features)):
+        var_map = {
+            feature: Variable(f"{feature}_{idx}") for feature in model_feature_cols
+        }
+        utilities[idx] = sum(
+            betas[feature] * var_map[feature] for feature in model_feature_cols
+        )
+        availability_expr[idx] = Variable(f"available_{idx}")
+
+    log_probability = models.loglogit(utilities, availability_expr, choice)
+    biogeme_model = BIOGEME(
+        database=database,  # ty: ignore[unknown-argument]
+        formulas=log_probability,  # ty: ignore[unknown-argument]
+        parameters=make_biogeme_parameters(use_jit=use_jit),  # ty: ignore[unknown-argument]
+    )
+    biogeme_model.model_name = f"{model_prefix}_{safe_identifier(spec_id)}"  # ty: ignore[unresolved-attribute]
+    results = biogeme_model.estimate(recycle=False, run_bootstrap=False)  # ty: ignore[unresolved-attribute]
+    estimated_parameters = get_pandas_estimated_parameters(estimation_results=results)
+    feature_by_beta_name = {value: key for key, value in beta_name_by_feature.items()}
+    estimated_parameters = estimated_parameters.assign(
+        spec_id=spec_id,
+        feature=lambda df: df["Name"].map(feature_by_beta_name).fillna(df["Name"]),
+    )
+    raw_results = getattr(results, "raw_estimation_results", None)
+    optimization_messages = getattr(raw_results, "optimization_messages", {}) or {}
+
+    return {
+        "spec_id": spec_id,
+        "static_cols": list(static_cols),
+        "dynamic_alt_feature_cols": list((dynamic_alt_features or {}).keys()),
+        "model_feature_cols": model_feature_cols,
+        "choice_frame": choice_frame,
+        "validation": validation,
+        "biogeme_model": biogeme_model,
+        "results": results,
+        "estimated_parameters": estimated_parameters,
+        "beta_name_by_feature": beta_name_by_feature,
+        "optimization_messages": optimization_messages,
+        "summary_row": {
+            "spec_id": spec_id,
+            "parameters": results.number_of_parameters,
+            "sample_size": results.sample_size,
+            "final_log_likelihood": results.final_log_likelihood,
+            "aic": results.akaike_information_criterion,
+            "bic": results.bayesian_information_criterion,
+            "algorithm_has_converged": bool(
+                getattr(results, "algorithm_has_converged", False),
+            ),
+        },
+    }
+
+
 def run_derivative_check(artifact: Mapping[str, object]) -> pd.DataFrame:
     try:
         biogeme_model = cast("DerivativeCheckModel", artifact["biogeme_model"])
@@ -268,6 +371,50 @@ def predict_choice_shares(
         transactions["neighborhood_idx"]
         .value_counts(normalize=True)
         .reindex(neighborhood_features.index, fill_value=0)
+        .sort_index()
+        .to_numpy()
+    )
+    return pd.DataFrame(
+        {
+            "neighborhood_idx": neighborhood_features.index,
+            "neighborhood": neighborhood_features["name_detail"].to_numpy(),
+            "observed_share": observed_share,
+            "predicted_share": predicted_share,
+            "share_error": predicted_share - observed_share,
+            "abs_share_error": np.abs(predicted_share - observed_share),
+        },
+    ).sort_values("observed_share", ascending=False)
+
+
+def predict_availability_choice_shares(
+    artifact: Mapping[str, object],
+    neighborhood_features: pd.DataFrame,
+) -> pd.DataFrame:
+    estimated_parameters = cast("pd.DataFrame", artifact["estimated_parameters"])
+    choice_frame = cast("pd.DataFrame", artifact["choice_frame"])
+    model_feature_cols = cast("list[str]", artifact["model_feature_cols"])
+    params = estimated_parameters.set_index("feature")["Value"].to_dict()
+    n_alternatives = len(neighborhood_features)
+
+    utility = np.zeros((len(choice_frame), n_alternatives), dtype=float)
+    for feature in model_feature_cols:
+        feature_values = choice_frame.loc[
+            :,
+            [f"{feature}_{idx}" for idx in range(n_alternatives)],
+        ].to_numpy(dtype=float)
+        utility += float(params[feature]) * feature_values
+
+    availability = choice_frame.loc[
+        :,
+        [f"available_{idx}" for idx in range(n_alternatives)],
+    ].to_numpy(dtype=bool)
+    utility = np.where(availability, utility, -np.inf)
+    probabilities = np.exp(utility - logsumexp(utility, axis=1)[:, None])
+    predicted_share = probabilities.mean(axis=0)
+    observed_share = (
+        choice_frame["neighborhood_idx"]
+        .value_counts(normalize=True)
+        .reindex(range(n_alternatives), fill_value=0)
         .sort_index()
         .to_numpy()
     )
