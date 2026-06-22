@@ -21,7 +21,7 @@ with app.setup:
     )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def md_overview():
     mo.md("""
     # Economic-Sector Cluster Statistics
@@ -31,7 +31,7 @@ def md_overview():
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def md_setup():
     mo.md("""
     ## Runtime Setup
@@ -140,7 +140,7 @@ def sector_cluster_configs(processed_path):
     return sector_cluster_config_summary, sector_cluster_configs
 
 
-@app.cell
+@app.cell(hide_code=True)
 def md_cluster_build():
     mo.md("""
     ## Cluster Build
@@ -210,7 +210,7 @@ def sector_cluster_summaries(sector_cluster_results):
     )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def md_feature_artifact():
     mo.md("""
     ## Neighborhood Feature Artifact

@@ -1,0 +1,228 @@
+from __future__ import annotations
+
+import argparse
+import math
+import os
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+import geopandas as gpd
+import pandas as pd
+
+from housing_choice.modeling.features import build_feature_catalog
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+
+CATALOG_COLUMNS = [
+    "source_column",
+    "model_column",
+    "family",
+    "role",
+    "transform",
+    "scale_denominator",
+    "eligible",
+    "reason",
+]
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Generate Markdown tables for the project documentation.",
+    )
+    parser.add_argument(
+        "--data-path",
+        default=None,
+        help="Project DATA_PATH. Defaults to the DATA_PATH environment variable.",
+    )
+    parser.add_argument(
+        "--output",
+        default="docs/generated/feature-catalog.md",
+        help="Markdown output path.",
+    )
+    return parser.parse_args()
+
+
+def resolve_data_path(cli_data_path: str | None) -> Path:
+    if cli_data_path is not None:
+        return Path(cli_data_path).expanduser().resolve()
+
+    data_path = os.environ.get("DATA_PATH")
+    if data_path is None:
+        msg = "DATA_PATH is required. Set it or pass --data-path."
+        raise RuntimeError(msg)
+    return Path(data_path).expanduser().resolve()
+
+
+def data_path_display(path: Path, data_path: Path) -> str:
+    try:
+        relative_path = path.relative_to(data_path)
+    except ValueError:
+        return str(path)
+    return str(relative_path)
+
+
+def portable_string(value: str, data_path: Path | None) -> str:
+    if data_path is None:
+        return value
+
+    path = Path(value)
+    if not path.is_absolute():
+        return value
+
+    return data_path_display(path, data_path)
+
+
+def format_markdown_value(value: object, data_path: Path | None = None) -> str:
+    if value is None or value is pd.NA:
+        return ""
+    if isinstance(value, float):
+        if math.isnan(value):
+            return ""
+        return f"{value:g}"
+    return (
+        portable_string(str(value), data_path)
+        .replace("\n", "<br>")
+        .replace(
+            "|",
+            r"\|",
+        )
+    )
+
+
+def markdown_table(
+    frame: pd.DataFrame,
+    *,
+    columns: Sequence[str] | None = None,
+    data_path: Path | None = None,
+) -> str:
+    if columns is not None:
+        frame = frame.loc[:, list(columns)]
+    if frame.empty:
+        return "_No rows._\n"
+
+    headers = list(frame.columns)
+    lines = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join("---" for _ in headers) + " |",
+    ]
+    lines.extend(
+        "| "
+        + " | ".join(format_markdown_value(value, data_path) for value in row)
+        + " |"
+        for row in frame.itertuples(index=False, name=None)
+    )
+    return "\n".join(lines) + "\n"
+
+
+def read_optional_parquet(path: Path) -> pd.DataFrame | None:
+    if not path.exists():
+        return None
+    return pd.read_parquet(path)
+
+
+def artifact_summary(data_path: Path) -> pd.DataFrame:
+    generated_path = data_path / "generated"
+    paths = {
+        "neighborhood_features": generated_path / "col_final.gpkg",
+        "transactions": generated_path / "transactions_final.parquet",
+        "sector_cluster_config_summary": (
+            generated_path / "sector_cluster_config_summary.parquet"
+        ),
+        "sector_cluster_threshold_audit": (
+            generated_path / "sector_cluster_threshold_audit.parquet"
+        ),
+    }
+    rows = []
+    for artifact, path in paths.items():
+        rows.append(
+            {
+                "artifact": artifact,
+                "path": data_path_display(path, data_path),
+                "exists": path.exists(),
+            },
+        )
+    return pd.DataFrame(rows)
+
+
+def build_feature_catalog_document(data_path: Path) -> str:
+    generated_path = data_path / "generated"
+    neighborhood_features_path = generated_path / "col_final.gpkg"
+    if not neighborhood_features_path.exists():
+        msg = f"Missing neighborhood feature artifact: {neighborhood_features_path}"
+        raise FileNotFoundError(msg)
+
+    neighborhood_raw = gpd.read_file(neighborhood_features_path)
+    feature_catalog = build_feature_catalog(neighborhood_raw)
+    feature_catalog = feature_catalog.loc[:, CATALOG_COLUMNS].sort_values(
+        ["family", "role", "source_column"],
+    )
+    feature_summary = (
+        feature_catalog.groupby(["family", "role", "eligible"], dropna=False)
+        .size()
+        .reset_index(name="columns")
+        .sort_values(["family", "role", "eligible"])
+    )
+
+    sector_config = read_optional_parquet(
+        generated_path / "sector_cluster_config_summary.parquet",
+    )
+    sector_thresholds = read_optional_parquet(
+        generated_path / "sector_cluster_threshold_audit.parquet",
+    )
+
+    parts = [
+        "# Generated Feature Catalog",
+        "",
+        "This file is generated by `scripts/generate_doc_tables.py` from the "
+        "current `DATA_PATH/generated/col_final.gpkg` artifact and the "
+        "`housing_choice.modeling.build_feature_catalog` helper.",
+        "",
+        "Paths in generated tables are relative to `DATA_PATH` unless otherwise noted.",
+        "",
+        "## Artifact Availability",
+        "",
+        markdown_table(artifact_summary(data_path), data_path=data_path),
+        "## Feature Family Summary",
+        "",
+        markdown_table(feature_summary, data_path=data_path),
+        "## Feature Catalog",
+        "",
+        markdown_table(feature_catalog, data_path=data_path),
+    ]
+
+    if sector_config is not None:
+        parts.extend(
+            [
+                "## Sector Cluster Configuration",
+                "",
+                markdown_table(sector_config, data_path=data_path),
+            ],
+        )
+
+    if sector_thresholds is not None:
+        parts.extend(
+            [
+                "## Sector Cluster Threshold Audit",
+                "",
+                markdown_table(sector_thresholds, data_path=data_path),
+            ],
+        )
+
+    return "\n".join(parts).rstrip() + "\n"
+
+
+def main() -> None:
+    args = parse_args()
+    data_path = resolve_data_path(args.data_path)
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        build_feature_catalog_document(data_path),
+        encoding="utf-8",
+    )
+
+
+if __name__ == "__main__":
+    main()
