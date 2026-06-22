@@ -19,7 +19,7 @@ Read the documents in this order:
    explains each feature family, how it is built, and how it should be
    interpreted.
 6. [Generated feature catalog](generated/feature-catalog.md) is generated from
-   the current `col_final.gpkg` artifact and the modeling feature catalog code.
+   the current `col_final.gpkg` artifact and the project feature catalog helper.
 
 Regenerate the raw catalog tables with:
 

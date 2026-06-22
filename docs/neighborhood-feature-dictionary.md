@@ -164,6 +164,19 @@ semantic SCIAN sector prefixes, maps `per_ocu` to approximate workers, and
 aggregates jobs to a 250 meter grid around the cleaned neighborhoods with a
 10 km buffer.
 
+Semantic sectors exported by the cluster pipeline:
+
+| Feature family | Source prefix | SCIAN prefixes |
+| --- | --- | --- |
+| manufacturing_cluster | `mfg` | `31`, `32`, `33` |
+| construction_cluster | `construction` | `23` |
+| logistics_cluster | `logistics` | `48`, `49` |
+| commerce_cluster | `commerce` | `43`, `46` |
+| business_services_cluster | `business_services` | `51`, `52`, `53`, `54`, `55`, `56` |
+| care_education_health_cluster | `care_education_health` | `61`, `62` |
+| local_services_cluster | `local_services` | `71`, `72`, `81` |
+| public_admin_cluster | `public_admin` | `92` |
+
 It computes spatial statistics on grid job counts, including global Moran's I,
 local Moran high-high cells, and Getis-Ord Gi* hotspot cells. Hotspot cells are
 dissolved into connected clusters before the cluster-level thresholds are

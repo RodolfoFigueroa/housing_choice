@@ -51,6 +51,26 @@ documentation currently uses `lyra-plugins` commit
 accessibility metrics. Record the deployed plugin commit when regenerating
 artifacts against a different Lyra deployment.
 
+## Lyra Service Data Requirements
+
+The canonical workflow does not rebuild Lyra's backend data. If `LYRA_HOST`
+points to an existing managed service, treat this section as the contract that
+the service must already satisfy. If you operate the Lyra service yourself, the
+engine must register the `accessibility_jobs` and `accessibility_services`
+processors and have access to the data below.
+
+| Lyra-side input | Used by | Contract |
+| --- | --- | --- |
+| DENUE establishments for the requested year and month | `accessibility_jobs`, `accessibility_services` | Must include establishment geometry, SCIAN activity code, and `per_ocu` employment-size range. Job accessibility filters these establishments by requested sector regex and maps `per_ocu` to approximate worker counts. |
+| Level-9 mesh cells covering the buffered request extent | `accessibility_jobs`, `accessibility_services` | Must provide geometries that can be assigned to network nodes and averaged back to the requested neighborhood geometries. |
+| 2020 AGEB census population fields | `accessibility_services` | Must support overlaying population onto level-9 mesh cells so service attraction can be discounted by nearby population pressure. |
+| OSM road-network access or cache | `accessibility_jobs`, `accessibility_services` | Must support the configured network types and impedance fields used by the metric requests, including drive-network travel time for job accessibility and distance-based accessibility for services. |
+| Client-supplied park/public-space geometries | `accessibility_services` | Supplied by this repository from `DATA_PATH/initial/esp_pub` in the Lyra request payload, not read from the Lyra database. |
+
+When regenerating artifacts against a new Lyra deployment, record both the
+deployed plugin commit and the backend data vintages. Otherwise identical
+repository inputs can produce different accessibility features.
+
 ## Data Layout
 
 `DATA_PATH` is expected to contain source inputs and will receive generated
