@@ -8,6 +8,9 @@ It does not describe or endorse any specific discrete choice model
 specification. Downstream modeling notebooks should document their own feature
 selection and interpretation decisions.
 
+See the [glossary](glossary.md) for project-specific definitions of external
+services, source data, spatial formats, and feature-method terms used below.
+
 ## Environment
 
 Install the Python environment with `uv` from the repository root:

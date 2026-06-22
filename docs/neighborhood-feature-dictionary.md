@@ -1,5 +1,9 @@
 # Neighborhood Feature Dictionary
 
+See the [glossary](glossary.md) for project-specific definitions of data
+sources, spatial terms, external services, accessibility metrics, and
+cluster-statistics terminology used in this document.
+
 ## Identifiers And Access
 
 `name`, `name_detail`, and `geometry` identify the neighborhood alternative.

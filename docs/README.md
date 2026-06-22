@@ -11,12 +11,14 @@ Read the documents in this order:
    analysis unit, and caveats.
 2. [Reproducing artifacts](reproducing-artifacts.md) explains environment
    variables, source-data contracts, external services, and regeneration order.
-3. [Data lineage](data-lineage.md) traces the artifacts from raw inputs to the
+3. [Glossary](glossary.md) defines project-specific data, spatial, metric, and
+   method terms used across the documentation.
+4. [Data lineage](data-lineage.md) traces the artifacts from raw inputs to the
    final analysis tables.
-4. [Neighborhood feature dictionary](neighborhood-feature-dictionary.md)
+5. [Neighborhood feature dictionary](neighborhood-feature-dictionary.md)
    explains each feature family, how it is built, and how it should be
    interpreted.
-5. [Generated feature catalog](generated/feature-catalog.md) is generated from
+6. [Generated feature catalog](generated/feature-catalog.md) is generated from
    the current `col_final.gpkg` artifact and the modeling feature catalog code.
 
 Regenerate the raw catalog tables with:
