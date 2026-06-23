@@ -46,6 +46,10 @@ from housing_choice.modeling.scenarios import (
     StructuralBaselineInputs,
     build_structural_baseline_inputs,
 )
+from housing_choice.modeling.spatial_features import (
+    add_centroid_grid_features,
+    add_centroid_quadratic_features,
+)
 from housing_choice.modeling.specs import (
     build_combination_model_specs,
     build_single_candidate_model_specs,
@@ -57,6 +61,8 @@ __all__ = [
     "ActiveChoiceSet",
     "JobGroupSpec",
     "StructuralBaselineInputs",
+    "add_centroid_grid_features",
+    "add_centroid_quadratic_features",
     "add_centroid_spatial_controls",
     "add_job_group_features",
     "align_choice_data",

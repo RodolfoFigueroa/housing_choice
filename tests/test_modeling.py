@@ -12,6 +12,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 from housing_choice.modeling import (
+    add_centroid_grid_features,
+    add_centroid_quadratic_features,
     add_centroid_spatial_controls,
     add_job_group_features,
     align_choice_data,
@@ -346,6 +348,66 @@ class ModelingTest(TestCase):
 
         assert with_spatial["centroid_east_km"].tolist() == [-1.0, 0.0, 2.0]
         assert with_spatial["centroid_north_km"].tolist() == [-2.0, 0.0, 2.0]
+
+    def test_centroid_quadratic_features_are_deterministic(self) -> None:
+        neighborhoods = pd.DataFrame(
+            {
+                "centroid_east_km": [1.0, -2.0],
+                "centroid_north_km": [3.0, 4.0],
+            },
+        )
+
+        with_quadratics = add_centroid_quadratic_features(neighborhoods)
+
+        assert with_quadratics["centroid_east_km_sq"].tolist() == [1.0, 4.0]
+        assert with_quadratics["centroid_north_km_sq"].tolist() == [9.0, 16.0]
+        assert with_quadratics["centroid_east_x_north_km2"].tolist() == [3.0, -8.0]
+
+    def test_centroid_grid_features_create_eight_non_reference_dummies(
+        self,
+    ) -> None:
+        neighborhoods = pd.DataFrame(
+            {
+                "centroid_east_km": [0.0, 0.1, 0.2, 1.0, 1.1, 1.2, 2.0, 2.1, 2.2],
+                "centroid_north_km": [0.0, 1.0, 2.0, 0.1, 1.1, 2.1, 0.2, 1.2, 2.2],
+            },
+        )
+
+        with_grid, catalog = add_centroid_grid_features(neighborhoods)
+
+        dummy_columns = catalog.loc[
+            ~catalog["is_reference"],
+            "model_column",
+        ].tolist()
+        assert len(dummy_columns) == 8
+        assert catalog.loc[
+            catalog["is_reference"],
+            "zone_id",
+        ].tolist() == ["central_central"]
+        assert "spatial_grid_3x3_central_central" not in with_grid.columns
+        assert set(with_grid["spatial_grid_3x3_zone"]) == set(catalog["zone_id"])
+        assert with_grid.loc[:, dummy_columns].sum(axis=1).tolist() == [
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+        ]
+
+    def test_spatial_feature_helpers_reject_missing_centroids(self) -> None:
+        message = value_error_message(
+            lambda: add_centroid_quadratic_features(pd.DataFrame({"x": [1.0]})),
+        )
+        assert "missing spatial columns" in message
+
+        message = value_error_message(
+            lambda: add_centroid_grid_features(pd.DataFrame({"x": [1.0]})),
+        )
+        assert "missing spatial columns" in message
 
     def test_active_choice_set_excludes_focal_sale_and_forces_chosen(
         self,
