@@ -9,6 +9,10 @@ dependencies = [
     "contextily>=1.7.0",
     "cython>=3.2.4",
     "cythonbiogeme>=1.0.4",
+    "dagster>=1.10.19",
+    "dagster-components",
+    "dagster-dg-cli>=1.10.19",
+    "dagster-webserver>=1.10.19",
     "duckdb>=1.4.4",
     "earthengine-api>=1.7.30",
     "esda>=2.9.0",
@@ -65,7 +69,9 @@ typeCheckingMode = "standard"
 ignore = ["**/*.ipynb"]
 
 [dependency-groups]
-dev = ["pre-commit>=4.5.1"]
+dev = [
+    "pre-commit>=4.5.1",
+]
 
 [build-system]
 requires = ["hatchling>=1.27.0"]
@@ -77,3 +83,4 @@ packages = ["src/housing_choice"]
 [tool.uv.sources]
 lyra-api = { git = "https://github.com/RodolfoFigueroa/lyra", subdirectory = "packages/lyra_api", branch = "dev" }
 lyra-sdk = { git = "https://github.com/RodolfoFigueroa/lyra", subdirectory = "packages/lyra_sdk", branch = "dev" }
+dagster-components = { git = "https://github.com/RodolfoFigueroa/dagster_components" }
