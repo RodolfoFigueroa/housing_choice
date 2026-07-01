@@ -44,7 +44,19 @@ dependencies = [
     "types-geopandas>=1.1.3.20260408",
 ]
 
+[tool.uv]
+override-dependencies = ["tomlkit >=0.15"]
+
+[tool.dg]
+directory_type = "project"
+
+[tool.dg.project]
+root_module = "housing_choice"
+
 [tool.ruff.lint]
+select = ["ALL"]
+ignore = ["D", "COM812", "PLR2004", "PLR1711"]
+
 per-file-ignores = { "tests/**/*.py" = [
     "S101",
 ], "notebooks/**/*.py" = [
@@ -59,19 +71,16 @@ per-file-ignores = { "tests/**/*.py" = [
     "ANN201",
     "T201",
     "F841",
+    "F401",
 ] }
 
 
-select = ["ALL"]
-ignore = ["D", "COM812", "PLR2004", "PLR1711"]
 [tool.basedpyright]
 typeCheckingMode = "standard"
 ignore = ["**/*.ipynb"]
 
 [dependency-groups]
-dev = [
-    "pre-commit>=4.5.1",
-]
+dev = ["pre-commit>=4.5.1"]
 
 [build-system]
 requires = ["hatchling>=1.27.0"]
