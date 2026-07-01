@@ -222,6 +222,11 @@ cache/
 *.geoparquet
 params/
 *.html
+.vscode/
+
+# Dagster
+dagster/
+!dagster/dagster.yaml
 
 # DVC
 /data
