@@ -39,6 +39,23 @@ class DerivativeCheckModel(Protocol):
     def check_derivatives(self, *, verbose: bool) -> DerivativeCheckResult: ...
 
 
+def _mcfadden_r_squared(
+    final_log_likelihood: float,
+    null_log_likelihood: float,
+) -> float:
+    if null_log_likelihood == 0 or not np.isfinite(null_log_likelihood):
+        return math.nan
+    return 1 - final_log_likelihood / null_log_likelihood
+
+
+def _equal_share_null_log_likelihood(availability: np.ndarray) -> float:
+    availability_counts = np.asarray(availability, dtype=bool).sum(axis=1)
+    if (availability_counts <= 0).any():
+        msg = "availability must include at least one available alternative per row"
+        raise ValueError(msg)
+    return -float(np.log(availability_counts).sum())
+
+
 def fit_fast_mnl_screen(
     spec_id: str,
     static_cols: Sequence[str],
@@ -79,6 +96,7 @@ def fit_fast_mnl_screen(
         options={"maxiter": 1000, "ftol": 1e-10, "gtol": 1e-6},
     )
     final_ll = -float(opt.fun)
+    null_ll = -float(n_obs * math.log(n_alt))
     n_params = len(model_feature_cols)
     coefficient_frame = pd.DataFrame(
         {
@@ -93,6 +111,8 @@ def fit_fast_mnl_screen(
             "parameters": n_params,
             "sample_size": n_obs,
             "final_log_likelihood": final_ll,
+            "null_log_likelihood": null_ll,
+            "mcfadden_r_squared": _mcfadden_r_squared(final_ll, null_ll),
             "aic": 2 * n_params - 2 * final_ll,
             "bic": math.log(n_obs) * n_params - 2 * final_ll,
             "screen_converged": bool(opt.success),
@@ -159,6 +179,7 @@ def fit_fast_availability_mnl_screen(  # noqa: PLR0913
         options={"maxiter": 1000, "ftol": 1e-10, "gtol": 1e-6},
     )
     final_ll = -float(opt.fun)
+    null_ll = _equal_share_null_log_likelihood(availability_matrix)
     n_params = len(model_feature_cols)
     coefficient_frame = pd.DataFrame(
         {
@@ -173,6 +194,8 @@ def fit_fast_availability_mnl_screen(  # noqa: PLR0913
             "parameters": n_params,
             "sample_size": n_obs,
             "final_log_likelihood": final_ll,
+            "null_log_likelihood": null_ll,
+            "mcfadden_r_squared": _mcfadden_r_squared(final_ll, null_ll),
             "aic": 2 * n_params - 2 * final_ll,
             "bic": math.log(n_obs) * n_params - 2 * final_ll,
             "screen_converged": bool(opt.success),
@@ -264,6 +287,8 @@ def fit_biogeme_model(  # noqa: PLR0913
     )
     raw_results = getattr(results, "raw_estimation_results", None)
     optimization_messages = getattr(raw_results, "optimization_messages", {}) or {}
+    final_ll = float(results.final_log_likelihood)
+    null_ll = -float(results.sample_size * math.log(len(neighborhood_features)))
 
     return {
         "spec_id": spec_id,
@@ -280,7 +305,9 @@ def fit_biogeme_model(  # noqa: PLR0913
             "spec_id": spec_id,
             "parameters": results.number_of_parameters,
             "sample_size": results.sample_size,
-            "final_log_likelihood": results.final_log_likelihood,
+            "final_log_likelihood": final_ll,
+            "null_log_likelihood": null_ll,
+            "mcfadden_r_squared": _mcfadden_r_squared(final_ll, null_ll),
             "aic": results.akaike_information_criterion,
             "bic": results.bayesian_information_criterion,
             "algorithm_has_converged": bool(
@@ -362,6 +389,13 @@ def fit_biogeme_availability_model(  # noqa: PLR0913
     )
     raw_results = getattr(results, "raw_estimation_results", None)
     optimization_messages = getattr(raw_results, "optimization_messages", {}) or {}
+    final_ll = float(results.final_log_likelihood)
+    null_ll = _equal_share_null_log_likelihood(
+        choice_frame.loc[
+            :,
+            [f"available_{idx}" for idx in range(len(neighborhood_features))],
+        ].to_numpy(dtype=bool),
+    )
 
     return {
         "spec_id": spec_id,
@@ -379,7 +413,9 @@ def fit_biogeme_availability_model(  # noqa: PLR0913
             "spec_id": spec_id,
             "parameters": results.number_of_parameters,
             "sample_size": results.sample_size,
-            "final_log_likelihood": results.final_log_likelihood,
+            "final_log_likelihood": final_ll,
+            "null_log_likelihood": null_ll,
+            "mcfadden_r_squared": _mcfadden_r_squared(final_ll, null_ll),
             "aic": results.akaike_information_criterion,
             "bic": results.bayesian_information_criterion,
             "algorithm_has_converged": bool(

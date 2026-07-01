@@ -290,6 +290,10 @@ class ModelingTest(TestCase):
         aic = screen_row["aic"]
         assert isinstance(aic, float)
         assert np.isfinite(aic)
+        assert screen_row["null_log_likelihood"] == -6 * np.log(3)
+        mcfadden_r_squared = screen_row["mcfadden_r_squared"]
+        assert isinstance(mcfadden_r_squared, float)
+        assert np.isfinite(mcfadden_r_squared)
         assert coefficients["feature"].tolist() == ["x", "log_built_area_ha"]
 
     def test_scale_audit_flags_binary_and_unscaled_columns(self) -> None:
@@ -594,6 +598,12 @@ class ModelingTest(TestCase):
         aic = screen_row["aic"]
         assert isinstance(aic, float)
         assert np.isfinite(aic)
+        assert screen_row["null_log_likelihood"] == -(
+            2 * np.log(2) + 2 * np.log(2) + 2 * np.log(3)
+        )
+        mcfadden_r_squared = screen_row["mcfadden_r_squared"]
+        assert isinstance(mcfadden_r_squared, float)
+        assert np.isfinite(mcfadden_r_squared)
         assert coefficients["feature"].tolist() == [
             "x",
             "log_active_sales_12m",

@@ -3,7 +3,7 @@ import marimo
 __generated_with = "0.23.9"
 app = marimo.App(width="medium")
 
-with app.setup(hide_code=True):
+with app.setup:
     import os
     import warnings
     from pathlib import Path
@@ -421,6 +421,19 @@ def fast_screen(
         fast_screen_table["spec_id"].eq(BASELINE_SPEC_ID),
         "aic",
     ].iloc[0]
+    _fast_null_log_likelihood = -float(
+        np.log(active_choice_set.availability.sum(axis=1)).sum(),
+    )
+    if "null_log_likelihood" not in fast_screen_table.columns:
+        fast_screen_table = fast_screen_table.assign(
+            null_log_likelihood=_fast_null_log_likelihood,
+        )
+    if "mcfadden_r_squared" not in fast_screen_table.columns:
+        fast_screen_table = fast_screen_table.assign(
+            mcfadden_r_squared=lambda df: (
+                1 - df["final_log_likelihood"] / df["null_log_likelihood"]
+            ),
+        )
     fast_screen_table = (
         fast_screen_table.assign(
             delta_aic_vs_structural_baseline=lambda df: (
@@ -431,6 +444,8 @@ def fast_screen(
         .round(
             {
                 "final_log_likelihood": 3,
+                "null_log_likelihood": 3,
+                "mcfadden_r_squared": 4,
                 "aic": 3,
                 "bic": 3,
                 "delta_aic_vs_structural_baseline": 3,
@@ -445,6 +460,7 @@ def fast_screen(
             "candidate_feature",
             "parameters",
             "aic",
+            "mcfadden_r_squared",
             "delta_aic_vs_structural_baseline",
             "screen_converged",
         ],
@@ -474,6 +490,10 @@ def biogeme_fit(
     fast_screen_table,
     model_specs,
 ):
+    _existing_biogeme_artifacts = globals().get("biogeme_artifacts", {})
+    if not isinstance(_existing_biogeme_artifacts, dict):
+        _existing_biogeme_artifacts = {}
+
     _biogeme_finalist_ids = [BASELINE_SPEC_ID]
     for _spatial_spec, _baseline_spec_id in {
         "baseline_linear": BASELINE_SPEC_ID,
@@ -501,18 +521,23 @@ def biogeme_fit(
 
     biogeme_artifacts = {}
     for _biogeme_spec in biogeme_finalist_specs.itertuples(index=False):
-        biogeme_artifacts[_biogeme_spec.spec_id] = fit_biogeme_availability_model(
-            _biogeme_spec.spec_id,
-            list(_biogeme_spec.static_cols),
-            choice_neighborhood_features_spatial,
-            active_choice_set.transactions,
-            built_area_cols,
-            active_choice_set.availability,
-            dynamic_alt_features=dynamic_alt_features,
-            model_prefix=BIOGEME_MODEL_PREFIX,
-            missing_value_sentinel=MISSING_VALUE_SENTINEL,
-            use_jit=False,
-        )
+        if _biogeme_spec.spec_id in _existing_biogeme_artifacts:
+            biogeme_artifacts[_biogeme_spec.spec_id] = _existing_biogeme_artifacts[
+                _biogeme_spec.spec_id
+            ]
+        else:
+            biogeme_artifacts[_biogeme_spec.spec_id] = fit_biogeme_availability_model(
+                _biogeme_spec.spec_id,
+                list(_biogeme_spec.static_cols),
+                choice_neighborhood_features_spatial,
+                active_choice_set.transactions,
+                built_area_cols,
+                active_choice_set.availability,
+                dynamic_alt_features=dynamic_alt_features,
+                model_prefix=BIOGEME_MODEL_PREFIX,
+                missing_value_sentinel=MISSING_VALUE_SENTINEL,
+                use_jit=False,
+            )
 
     biogeme_error_table = pd.DataFrame()
     biogeme_model_summary = pd.DataFrame(
@@ -526,6 +551,19 @@ def biogeme_fit(
         biogeme_model_summary["spec_id"].eq(BASELINE_SPEC_ID),
         "aic",
     ].iloc[0]
+    _biogeme_null_log_likelihood = -float(
+        np.log(active_choice_set.availability.sum(axis=1)).sum(),
+    )
+    if "null_log_likelihood" not in biogeme_model_summary.columns:
+        biogeme_model_summary = biogeme_model_summary.assign(
+            null_log_likelihood=_biogeme_null_log_likelihood,
+        )
+    if "mcfadden_r_squared" not in biogeme_model_summary.columns:
+        biogeme_model_summary = biogeme_model_summary.assign(
+            mcfadden_r_squared=lambda df: (
+                1 - df["final_log_likelihood"] / df["null_log_likelihood"]
+            ),
+        )
     biogeme_model_summary = (
         biogeme_model_summary.assign(
             delta_aic_vs_structural_baseline=lambda df: (
@@ -536,6 +574,8 @@ def biogeme_fit(
         .round(
             {
                 "final_log_likelihood": 3,
+                "null_log_likelihood": 3,
+                "mcfadden_r_squared": 4,
                 "aic": 3,
                 "bic": 3,
                 "delta_aic_vs_structural_baseline": 3,
@@ -561,6 +601,7 @@ def biogeme_fit(
                     "sample_size",
                     "final_log_likelihood",
                     "aic",
+                    "mcfadden_r_squared",
                     "delta_aic_vs_structural_baseline",
                     "algorithm_has_converged",
                 ],
@@ -739,6 +780,17 @@ def reading(biogeme_model_summary, job_survival_table):
 
     The lowest-AIC fitted Biogeme model is `{_best_model_row["spec_id"]}` with AIC `{_best_model_row["aic"]}`. Industrial job extensions that survive their matched fitted spatial baseline are: `{_survival_text}`. Grid specifications are retained in the fast screen as spatial-fragility diagnostics, but are not baseline-ready until a dedicated grid Biogeme run is completed.
     """)
+    return
+
+
+@app.cell
+def _(biogeme_model_summary):
+    biogeme_model_summary.sort_values("aic").iloc[0]
+    return
+
+
+@app.cell
+def _():
     return
 
 
